@@ -69,8 +69,8 @@ export default function ContentPage() {
         page,
         limit: 12,
       });
-      setContent(response.data.content);
-      setTotal(response.data.total);
+      setContent(response.data.data || []);
+      setTotal(response.data.meta?.total || 0);
     } catch (error) {
       console.error('Failed to fetch content:', error);
     } finally {
@@ -114,8 +114,11 @@ export default function ContentPage() {
       }
       
       await fetchContent();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create content:', error);
+      if (error.response?.data?.message) {
+        console.error('Backend error:', error.response.data.message);
+      }
       throw error;
     }
   };
@@ -335,7 +338,7 @@ export default function ContentPage() {
       )}
 
       {/* Content Grid */}
-      {content.length === 0 ? (
+      {(!content || content.length === 0) ? (
         <Card className="p-12 text-center">
           <div className="flex flex-col items-center space-y-4">
             <div className="w-16 h-16 bg-[#fef7f5] rounded-full flex items-center justify-center">
@@ -357,7 +360,7 @@ export default function ContentPage() {
       ) : (
         <>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {content.map((item) => (
+            {(content || []).map((item) => (
               <Card key={item.id} className="p-4 hover:shadow-lg transition-shadow">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center space-x-2">

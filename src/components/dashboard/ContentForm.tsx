@@ -14,7 +14,7 @@ const contentSchema = z.object({
   accountId: z.number().min(1, 'Please select an account'),
   caption: z.string().max(2200, 'Caption must be less than 2200 characters').optional(),
   hashTags: z.string().optional(),
-  generatedSource: z.string().min(1, 'Generated source is required'),
+  generatedSource: z.string().min(1, 'Generated source is required').default('Manual Creation'),
   usedTopics: z.string().optional(),
   tone: z.string().optional(),
   type: z.enum(['reel', 'story', 'post_with_image']).default('post_with_image'),
@@ -288,6 +288,7 @@ export default function ContentForm({
                   id="generatedSource"
                   type="text"
                   placeholder="e.g., AI Generator, Manual Creation, Template"
+                  defaultValue="Manual Creation"
                   {...register('generatedSource')}
                   error={errors.generatedSource?.message}
                 />
