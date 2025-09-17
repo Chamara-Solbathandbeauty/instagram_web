@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, Edit2, Trash2, Instagram } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import IgAccountForm from './IgAccountForm';
 import InstagramConnect from './InstagramConnect';
 import { igAccountsApi } from '@/lib/api';
 
@@ -14,6 +14,16 @@ interface ActiveSchedule {
   description?: string;
   status: string;
   isEnabled: boolean;
+}
+
+interface AccountImage {
+  id: number;
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+  mimeType: string;
+  displayOrder: number;
+  createdAt: string;
 }
 
 interface IgAccount {
@@ -26,28 +36,46 @@ interface IgAccount {
   createdAt: string;
   updatedAt: string;
   activeSchedule?: ActiveSchedule;
+  images?: AccountImage[];
 }
 
-interface IgAccountFormData {
-  name: string;
-  description?: string;
-  topics?: string;
-  tone?: string;
-  type: 'business' | 'creator';
-}
 
 export default function IgAccountsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [accounts, setAccounts] = useState<IgAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<IgAccount | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   const fetchAccounts = async () => {
     try {
       setIsLoading(true);
       const response = await igAccountsApi.getAll();
-      setAccounts(response.data);
+      const accountsData = response.data;
+
+      // Load images for each account
+      const accountsWithImages = await Promise.all(
+        accountsData.map(async (account: any) => {
+          try {
+            console.log(`Loading images for account ${account.id} (${account.name})`);
+            const imagesResponse = await igAccountsApi.getImages(account.id);
+            console.log(`Images for account ${account.id}:`, imagesResponse.data);
+            return {
+              ...account,
+              images: imagesResponse.data || [],
+            };
+          } catch (error) {
+            console.error(`Failed to load images for account ${account.id}:`, error);
+            return {
+              ...account,
+              images: [],
+            };
+          }
+        })
+      );
+
+      setAccounts(accountsWithImages);
     } catch (error) {
       console.error('Failed to fetch IG accounts:', error);
     } finally {
@@ -59,28 +87,21 @@ export default function IgAccountsPage() {
     fetchAccounts();
   }, []);
 
-  const handleCreateAccount = async (data: IgAccountFormData) => {
-    try {
-      await igAccountsApi.create(data);
-      await fetchAccounts();
-    } catch (error) {
-      console.error('Failed to create IG account:', error);
-      throw error;
+  // Handle success message from edit page
+  useEffect(() => {
+    if (searchParams.get('updated') === 'true') {
+      setShowSuccessMessage(true);
+      // Remove the parameter from URL
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('updated');
+      window.history.replaceState({}, '', newUrl.toString());
+      
+      // Hide message after 3 seconds
+      setTimeout(() => setShowSuccessMessage(false), 3000);
     }
-  };
+  }, [searchParams]);
 
-  const handleUpdateAccount = async (data: IgAccountFormData) => {
-    if (!editingAccount) return;
-    
-    try {
-      await igAccountsApi.update(editingAccount.id, data);
-      await fetchAccounts();
-      setEditingAccount(null);
-    } catch (error) {
-      console.error('Failed to update IG account:', error);
-      throw error;
-    }
-  };
+
 
   const handleDeleteAccount = async (id: number) => {
     if (!confirm('Are you sure you want to delete this IG account?')) return;
@@ -97,14 +118,9 @@ export default function IgAccountsPage() {
   };
 
   const handleEditClick = (account: IgAccount) => {
-    setEditingAccount(account);
-    setIsFormOpen(true);
+    router.push(`/dashboard/accounts/edit/${account.id}`);
   };
 
-  const handleFormClose = () => {
-    setIsFormOpen(false);
-    setEditingAccount(null);
-  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -124,6 +140,24 @@ export default function IgAccountsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Success Message */}
+      {showSuccessMessage && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-green-800">
+                Account updated successfully!
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
@@ -132,7 +166,7 @@ export default function IgAccountsPage() {
         </div>
         <div className="flex-shrink-0">
           <Button
-            onClick={() => setIsFormOpen(true)}
+            onClick={() => router.push('/dashboard/accounts/create')}
             className="bg-[#ef5a29] text-white hover:bg-[#d4491f] px-4 py-2 rounded-md flex items-center gap-2 font-medium"
           >
             <Plus className="h-4 w-4" />
@@ -152,8 +186,8 @@ export default function IgAccountsPage() {
               <h3 className="text-lg font-semibold text-black-medium">No IG Accounts Yet</h3>
               <p className="text-black-muted mt-1">Create your first Instagram account configuration to get started.</p>
             </div>
-            <Button
-              onClick={() => setIsFormOpen(true)}
+            <Button 
+              onClick={() => router.push('/dashboard/accounts/create')}
               className="bg-[#ef5a29] text-white hover:bg-[#d4491f] px-4 py-2 rounded-md flex items-center gap-2 font-medium"
             >
               <Plus className="h-4 w-4" />
@@ -200,6 +234,36 @@ export default function IgAccountsPage() {
                 <p className="text-sm text-black-muted mb-4 line-clamp-3">
                   {account.description}
                 </p>
+              )}
+
+              {/* Account Images Preview */}
+              {account.images && account.images.length > 0 && (
+                <div className="mb-4">
+                  <span className="text-xs font-medium text-black-medium uppercase tracking-wide">Images</span>
+                  <div className="flex space-x-2 mt-1">
+                    {account.images.slice(0, 3).map((image, index) => (
+                      <div
+                        key={image.id}
+                        className="w-8 h-8 rounded-md overflow-hidden bg-gray-100 flex-shrink-0"
+                      >
+                        <img
+                          src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/uploads/account-images/${image.filePath}`}
+                          alt={`Account image ${index + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    ))}
+                    {account.images.length > 3 && (
+                      <div className="w-8 h-8 rounded-md bg-gray-100 flex items-center justify-center">
+                        <span className="text-xs text-gray-500">+{account.images.length - 3}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
 
               <div className="space-y-2">
@@ -263,21 +327,6 @@ export default function IgAccountsPage() {
         </div>
       )}
 
-      {/* Form Modal */}
-      <IgAccountForm
-        isOpen={isFormOpen}
-        onClose={handleFormClose}
-        onSubmit={editingAccount ? handleUpdateAccount : handleCreateAccount}
-        initialData={editingAccount ? {
-          name: editingAccount.name,
-          description: editingAccount.description,
-          topics: editingAccount.topics,
-          tone: editingAccount.tone,
-          type: editingAccount.type,
-        } : undefined}
-        accountData={editingAccount}
-        isEdit={!!editingAccount}
-      />
     </div>
   );
 }

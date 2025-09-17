@@ -8,6 +8,8 @@ import { X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import InstagramConnect from './InstagramConnect';
+import AccountImageUpload from '@/components/ui/AccountImageUpload';
+import { igAccountsApi } from '@/lib/api';
 
 const igAccountSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -27,6 +29,16 @@ interface ActiveSchedule {
   isEnabled: boolean;
 }
 
+interface AccountImage {
+  id: number;
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+  mimeType: string;
+  displayOrder: number;
+  createdAt: string;
+}
+
 interface IgAccount {
   id: number;
   name: string;
@@ -37,6 +49,7 @@ interface IgAccount {
   createdAt: string;
   updatedAt: string;
   activeSchedule?: ActiveSchedule;
+  images?: AccountImage[];
 }
 
 interface IgAccountFormProps {
@@ -57,6 +70,7 @@ export default function IgAccountForm({
   isEdit = false 
 }: IgAccountFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [accountImages, setAccountImages] = useState<AccountImage[]>([]);
 
   const {
     register,
@@ -94,6 +108,34 @@ export default function IgAccountForm({
       });
     }
   }, [initialData, reset]);
+
+  // Load existing images when in edit mode
+  useEffect(() => {
+    if (isEdit && accountData?.images) {
+      console.log('Loading images from accountData:', accountData.images);
+      setAccountImages(accountData.images);
+    } else {
+      setAccountImages([]);
+    }
+  }, [isEdit, accountData]);
+
+  // Load images from API if not provided in accountData
+  useEffect(() => {
+    if (isEdit && accountData && (!accountData.images || accountData.images.length === 0)) {
+      const loadImages = async () => {
+        try {
+          console.log('Loading images from API for account:', accountData.id);
+          const response = await igAccountsApi.getImages(accountData.id);
+          console.log('API response:', response.data);
+          setAccountImages(response.data || []);
+        } catch (error) {
+          console.error('Failed to load account images:', error);
+          setAccountImages([]);
+        }
+      };
+      loadImages();
+    }
+  }, [isEdit, accountData]);
 
   const handleFormSubmit = async (data: any) => {
     setIsSubmitting(true);
@@ -237,6 +279,29 @@ export default function IgAccountForm({
                       <p className="text-sm text-black-muted">{accountData.activeSchedule.description}</p>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Account Images - Only show for existing accounts */}
+              {isEdit && accountData && (
+                <div className="pt-4 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-medium text-black-medium">Account Images</h4>
+                    {accountImages.length > 0 && (
+                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                        {accountImages.length}/3 uploaded
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Upload up to 3 images to represent your account. Supported formats: JPG, PNG, GIF, WebP (max 5MB each)
+                  </p>
+                  <AccountImageUpload
+                    accountId={accountData.id}
+                    existingImages={accountImages}
+                    onImagesChange={setAccountImages}
+                    maxImages={3}
+                  />
                 </div>
               )}
 

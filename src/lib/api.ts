@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:3001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -48,6 +48,16 @@ export const igAccountsApi = {
     tone?: string;
   }) => api.put(`/users/ig-accounts/${id}`, data),
   delete: (id: number) => api.delete(`/users/ig-accounts/${id}`),
+  
+  // Account Images
+  getImages: (accountId: number) => api.get(`/users/ig-accounts/${accountId}/images`),
+  uploadImages: (accountId: number, formData: FormData) => api.post(`/users/ig-accounts/${accountId}/images`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  }),
+  deleteImage: (imageId: number) => api.delete(`/users/ig-accounts/images/${imageId}`),
+  updateImageOrder: (imageId: number, order: number) => api.put(`/users/ig-accounts/images/${imageId}/order`, { order }),
 };
 
 // Content API functions
@@ -102,6 +112,7 @@ export const contentApi = {
   }) => api.post(`/content/${contentId}/media`, data),
   getMedia: (contentId: number) => api.get(`/content/${contentId}/media`),
   deleteMedia: (mediaId: number) => api.delete(`/content/media/${mediaId}`),
+  regenerateMedia: (mediaId: number, prompt: string) => api.post(`/content/media/${mediaId}/regenerate`, { prompt }),
 };
 
 // Schedules API functions

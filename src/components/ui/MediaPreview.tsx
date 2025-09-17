@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Image, Video, File, Play, Download, Trash2 } from 'lucide-react';
+import { Image, Video, File, Play, Download, Trash2, Sparkles } from 'lucide-react';
 import { Button } from './Button';
+import RegenerateMediaModal from './RegenerateMediaModal';
 
 interface MediaPreviewProps {
   media: {
@@ -13,8 +14,10 @@ interface MediaPreviewProps {
     mimeType: string;
     mediaType: 'image' | 'video';
     createdAt: string;
+    prompt?: string;
   };
   onDelete?: (mediaId: number) => void;
+  onRegenerate?: (mediaId: number, prompt: string) => void;
   showActions?: boolean;
   className?: string;
 }
@@ -22,15 +25,17 @@ interface MediaPreviewProps {
 export default function MediaPreview({ 
   media, 
   onDelete, 
+  onRegenerate,
   showActions = true,
   className = '' 
 }: MediaPreviewProps) {
   const [imageError, setImageError] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
 
   // Construct the full URL for the media file
   const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  const mediaUrl = `${backendUrl}/uploads/${media.filePath}`;
+  const mediaUrl = `${backendUrl}/uploads/media/${media.filePath}`;
   
   const isImage = media.mediaType === 'image' || media.mimeType.startsWith('image/');
   const isVideo = media.mediaType === 'video' || media.mimeType.startsWith('video/');
@@ -146,6 +151,17 @@ export default function MediaPreview({
               <Download className="h-3 w-3 mr-1" />
               Download
             </Button>
+            {onRegenerate && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowRegenerateModal(true)}
+                className="text-[#ef5a29] hover:text-[#d4491f] hover:bg-[#fef7f5]"
+                title="Re-generate with AI"
+              >
+                <Sparkles className="h-3 w-3" />
+              </Button>
+            )}
             {onDelete && (
               <Button
                 variant="outline"
@@ -192,6 +208,21 @@ export default function MediaPreview({
             </video>
           </div>
         </div>
+      )}
+
+      {/* Regenerate Media Modal */}
+      {showRegenerateModal && onRegenerate && (
+        <RegenerateMediaModal
+          isOpen={showRegenerateModal}
+          onClose={() => setShowRegenerateModal(false)}
+          onRegenerate={async (prompt) => {
+            await onRegenerate(media.id, prompt);
+            setShowRegenerateModal(false);
+          }}
+          currentPrompt={media.prompt}
+          mediaType={media.mediaType}
+          mediaFileName={media.fileName}
+        />
       )}
     </div>
   );

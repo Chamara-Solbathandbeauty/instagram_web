@@ -39,6 +39,7 @@ interface MediaFile {
   mimeType: string;
   mediaType: 'image' | 'video';
   createdAt: string;
+  prompt?: string;
 }
 
 export default function EditContentPage() {
@@ -136,6 +137,17 @@ export default function EditContentPage() {
       await loadMediaFiles();
     } catch (error) {
       console.error('Failed to delete media:', error);
+    }
+  };
+
+  // Handle media regeneration
+  const handleRegenerateMedia = async (mediaId: number, prompt: string) => {
+    try {
+      await contentApi.regenerateMedia(mediaId, prompt);
+      await loadMediaFiles(); // Reload media files to show the new one
+    } catch (error) {
+      console.error('Failed to regenerate media:', error);
+      throw error; // Re-throw to let the modal handle the error
     }
   };
 
@@ -360,6 +372,7 @@ export default function EditContentPage() {
                       key={media.id}
                       media={media}
                       onDelete={handleDeleteMedia}
+                      onRegenerate={handleRegenerateMedia}
                       showActions={true}
                     />
                   ))}
