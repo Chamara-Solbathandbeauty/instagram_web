@@ -74,21 +74,22 @@ export default function LoginForm() {
 
             <Button
               type="submit"
-              className="w-full"
+              className="w-full text-black bg-blue-500"
               disabled={isLoading}
             >
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
 
-          <div className="mt-4 text-center">
+          {/* Register feature temporarily disabled */}
+          {/* <div className="mt-4 text-center">
             <p className="text-sm text-gray-600">
                 Don&apos;t have an account?{' '}
               <a href="/register" className="text-blue-600 hover:text-blue-500">
                 Sign up
               </a>
             </p>
-          </div>
+          </div> */}
         </CardContent>
       </Card>
     </div>
