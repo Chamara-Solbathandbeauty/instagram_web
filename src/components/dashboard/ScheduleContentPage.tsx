@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Calendar, Clock, Filter, Trash2, Play, Pause, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -119,29 +119,36 @@ export default function ScheduleContentPage() {
     scheduledDateTo: '',
   });
 
-  const fetchScheduleContent = async () => {
+  const fetchScheduleContent = useCallback(async () => {
     try {
       setIsLoading(true);
       console.log('Starting to fetch schedule content...');
       
       const apiFilters: Record<string, string | number> = {
-        page,
+        page: page || 1,
         limit: 10,
       };
       
-      if (filters.scheduleId) {
-        apiFilters.scheduleId = parseInt(filters.scheduleId);
+      // Only add filters if they have valid values
+      if (filters.scheduleId && filters.scheduleId !== '') {
+        const scheduleId = parseInt(filters.scheduleId);
+        if (!isNaN(scheduleId) && scheduleId > 0) {
+          apiFilters.scheduleId = scheduleId;
+        }
       }
-      if (filters.accountId) {
-        apiFilters.accountId = parseInt(filters.accountId);
+      if (filters.accountId && filters.accountId !== '') {
+        const accountId = parseInt(filters.accountId);
+        if (!isNaN(accountId) && accountId > 0) {
+          apiFilters.accountId = accountId;
+        }
       }
-      if (filters.status) {
+      if (filters.status && filters.status !== '') {
         apiFilters.status = filters.status;
       }
-      if (filters.scheduledDateFrom) {
+      if (filters.scheduledDateFrom && filters.scheduledDateFrom !== '') {
         apiFilters.scheduledDateFrom = filters.scheduledDateFrom;
       }
-      if (filters.scheduledDateTo) {
+      if (filters.scheduledDateTo && filters.scheduledDateTo !== '') {
         apiFilters.scheduledDateTo = filters.scheduledDateTo;
       }
       
@@ -169,7 +176,7 @@ export default function ScheduleContentPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filters, page]);
 
   const fetchSchedules = async () => {
     try {
@@ -202,7 +209,7 @@ export default function ScheduleContentPage() {
 
   useEffect(() => {
     fetchScheduleContent();
-  }, [filters, page]);
+  }, [filters, page, fetchScheduleContent]);
 
   useEffect(() => {
     fetchSchedules();

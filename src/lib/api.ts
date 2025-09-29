@@ -110,6 +110,16 @@ export const contentApi = {
     mimeType: string;
     mediaType: 'image' | 'video';
   }) => api.post(`/content/${contentId}/media`, data),
+  uploadMedia: (contentId: number, formData: FormData) => api.post(`/content/${contentId}/media`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  }),
+  replaceMedia: (contentId: number, formData: FormData) => api.post(`/content/${contentId}/media/replace`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  }),
   getMedia: (contentId: number) => api.get(`/content/${contentId}/media`),
   deleteMedia: (mediaId: number) => api.delete(`/content/media/${mediaId}`),
   regenerateMedia: (mediaId: number, prompt: string) => api.post(`/content/media/${mediaId}/regenerate`, { prompt }),
@@ -195,13 +205,23 @@ export const scheduleContentApi = {
     page?: number;
     limit?: number;
   }) => api.get('/schedule-content/queue', { params: filters }),
+  getAvailableTimeSlots: (scheduleId: number, scheduledDate: string) => 
+    api.get('/schedule-content/available-time-slots', { 
+      params: { scheduleId, scheduledDate } 
+    }),
+  assignToTimeSlot: (data: {
+    scheduleId: number;
+    timeSlotId: number;
+    contentId: number;
+    scheduledDate: string;
+  }) => api.post('/schedule-content/assign', data),
 };
 
 // AI API functions
 export const aiApi = {
   generateSchedule: (accountId: number) => api.get(`/ai/generate-schedule/${accountId}`),
-  generateSchedulePost: (data: { accountId: number }) => api.post('/ai/generate-schedule', data),
-  generateContent: (data: { scheduleId: number; generationWeek?: string }) => api.post('/ai/generate-content', data),
+  generateSchedulePost: (data: { accountId: number; userInstructions?: string }) => api.post('/ai/generate-schedule', data),
+  generateContent: (data: { scheduleId: number; generationWeek?: string; userInstructions?: string }) => api.post('/ai/generate-content', data),
   getNextGeneratableWeek: (scheduleId: number) => api.get(`/ai/next-generatable-week/${scheduleId}`),
 };
 

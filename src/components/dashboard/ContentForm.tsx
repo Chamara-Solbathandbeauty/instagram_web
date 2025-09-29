@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { X, Upload, Trash2, Image, Video, Calendar } from 'lucide-react';
+import { X, Trash2, Image, Video } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { contentApi } from '@/lib/api';
+import { contentApi, schedulesApi, scheduleContentApi } from '@/lib/api';
 import MediaPreview from '@/components/ui/MediaPreview';
+import FileUpload from '@/components/ui/FileUpload';
 
 const contentSchema = z.object({
   accountId: z.number().min(1, 'Please select an account'),
@@ -39,10 +40,29 @@ interface MediaFile {
   createdAt: string;
 }
 
+interface Schedule {
+  id: number;
+  name: string;
+  account: {
+    id: number;
+    name: string;
+  };
+}
+
+interface TimeSlot {
+  id: number;
+  startTime: string;
+  endTime: string;
+  dayOfWeek: number;
+  postType: 'reel' | 'story' | 'post_with_image';
+  label: string;
+  isAvailable: boolean;
+}
+
 interface ContentFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: ContentFormData) => Promise<void>;
   initialData?: Partial<ContentFormData & { id?: number }>;
   isEdit?: boolean;
   accounts: IgAccount[];
@@ -58,9 +78,19 @@ export default function ContentForm({
 }: ContentFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
-  const [newMediaPath, setNewMediaPath] = useState('');
-  const [newMediaType, setNewMediaType] = useState<'reel' | 'story' | 'image'>('image');
   const [isLoadingMedia, setIsLoadingMedia] = useState(false);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  
+  // Schedule assignment state
+  const [showScheduleAssignment, setShowScheduleAssignment] = useState(false);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<TimeSlot[]>([]);
+  const [selectedSchedule, setSelectedSchedule] = useState<number | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<number | null>(null);
+  const [isLoadingTimeSlots, setIsLoadingTimeSlots] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
 
   const {
     register,
@@ -68,7 +98,6 @@ export default function ContentForm({
     formState: { errors },
     reset,
     watch,
-    setValue,
   } = useForm({
     resolver: zodResolver(contentSchema),
     defaultValues: {
@@ -131,19 +160,57 @@ export default function ContentForm({
     }
   }, [initialData, reset, accounts, isEdit]);
 
-  const handleFormSubmit = async (data: any) => {
+  // Fetch schedules when component mounts
+  useEffect(() => {
+    const fetchSchedules = async () => {
+      try {
+        const response = await schedulesApi.getAll();
+        setSchedules(response.data.schedules);
+      } catch (error) {
+        console.error('Failed to fetch schedules:', error);
+      }
+    };
+    
+    if (isOpen) {
+      fetchSchedules();
+    }
+  }, [isOpen]);
+
+  // Fetch available time slots when schedule and date are selected
+  useEffect(() => {
+    const fetchAvailableTimeSlots = async () => {
+      if (!selectedSchedule || !selectedDate) return;
+      
+      try {
+        setIsLoadingTimeSlots(true);
+        const response = await scheduleContentApi.getAvailableTimeSlots(selectedSchedule, selectedDate);
+        setAvailableTimeSlots(response.data);
+      } catch (error) {
+        console.error('Failed to fetch available time slots:', error);
+        setAvailableTimeSlots([]);
+      } finally {
+        setIsLoadingTimeSlots(false);
+      }
+    };
+    
+    if (selectedSchedule && selectedDate) {
+      fetchAvailableTimeSlots();
+    }
+  }, [selectedSchedule, selectedDate]);
+
+  const handleFormSubmit = async (data: ContentFormData) => {
     setIsSubmitting(true);
     try {
-      // Convert hashTags string to array
+      // Keep hashTags as string for the API
       const formattedData = {
         ...data,
-        hashTags: data.hashTags ? data.hashTags.split(',').map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0) : [],
-        // Include media files for new content
-        mediaFiles: !initialData?.id ? mediaFiles : undefined,
+        // Include selected files for new content
+        selectedFiles: !initialData?.id ? selectedFiles : undefined,
       };
       await onSubmit(formattedData);
       reset();
       setMediaFiles([]);
+      setSelectedFiles([]);
       onClose();
     } catch (error) {
       console.error('Error submitting form:', error);
@@ -152,42 +219,6 @@ export default function ContentForm({
     }
   };
 
-  const handleAddMedia = async () => {
-    if (!newMediaPath.trim()) return;
-    
-    // For new content, just add to local state
-    if (!initialData?.id) {
-      const newMedia: MediaFile = {
-        id: Date.now(), // Temporary ID for new media
-        fileName: newMediaPath.trim().split('/').pop() || 'new-media',
-        filePath: newMediaPath.trim(),
-        fileSize: 0,
-        mimeType: newMediaType === 'image' ? 'image/jpeg' : 'video/mp4',
-        mediaType: newMediaType === 'image' ? 'image' : 'video',
-        createdAt: new Date().toISOString(),
-      };
-      setMediaFiles(prev => [...prev, newMedia]);
-      setNewMediaPath('');
-      return;
-    }
-    
-    // For existing content, save to backend
-    try {
-      await contentApi.addMedia(initialData.id, {
-        fileName: newMediaPath.trim().split('/').pop() || 'new-media',
-        filePath: newMediaPath.trim(),
-        fileSize: 0,
-        mimeType: newMediaType === 'image' ? 'image/jpeg' : 'video/mp4',
-        mediaType: newMediaType === 'image' ? 'image' : 'video',
-      });
-      
-      // Reload media files
-      loadMediaFiles(initialData.id);
-      setNewMediaPath('');
-    } catch (error) {
-      console.error('Failed to add media:', error);
-    }
-  };
 
   const handleDeleteMedia = async (mediaId: number) => {
     try {
@@ -202,22 +233,102 @@ export default function ContentForm({
     }
   };
 
-  const getMediaIcon = (type: string) => {
-    switch (type) {
-      case 'reel':
-        return <Video className="h-4 w-4" />;
-      case 'story':
-        return <Calendar className="h-4 w-4" />;
-      default:
-        return <Image className="h-4 w-4" />;
+  const handleFilesSelected = (files: File[]) => {
+    setSelectedFiles(files);
+  };
+
+  const handleFileUpload = async (files: File[], prompt?: string) => {
+    if (!initialData?.id) {
+      // For new content, just store files for later upload
+      setSelectedFiles(files);
+      return;
+    }
+
+    try {
+      setIsUploadingMedia(true);
+      
+      // Create FormData for file upload
+      const formData = new FormData();
+      files.forEach((file) => {
+        formData.append('mediaFiles', file);
+      });
+      
+      if (prompt) {
+        formData.append('prompt', prompt);
+      }
+
+      // Upload files to existing content
+      await contentApi.uploadMedia(initialData.id, formData);
+      
+      // Reload media files
+      await loadMediaFiles(initialData.id);
+      setSelectedFiles([]);
+    } catch (error) {
+      console.error('Failed to upload media:', error);
+      throw error;
+    } finally {
+      setIsUploadingMedia(false);
     }
   };
+
 
   const handleClose = () => {
     reset();
     setMediaFiles([]);
-    setNewMediaPath('');
     onClose();
+  };
+
+  // Schedule assignment functions
+  const handleScheduleAssignment = async () => {
+    if (!selectedSchedule || !selectedTimeSlot || !selectedDate) {
+      alert('Please select a schedule, date, and time slot');
+      return;
+    }
+
+    // For new content, we need to create it first
+    if (!isEdit || !initialData?.id) {
+      alert('Please save the content first before assigning it to a schedule');
+      return;
+    }
+
+    try {
+      setIsAssigning(true);
+      await scheduleContentApi.assignToTimeSlot({
+        scheduleId: selectedSchedule,
+        timeSlotId: selectedTimeSlot,
+        contentId: initialData.id,
+        scheduledDate: selectedDate,
+      });
+      
+      alert('Content successfully assigned to schedule!');
+      setShowScheduleAssignment(false);
+      // Reset selections
+      setSelectedSchedule(null);
+      setSelectedDate('');
+      setSelectedTimeSlot(null);
+      setAvailableTimeSlots([]);
+    } catch (error) {
+      console.error('Failed to assign content to schedule:', error);
+      alert('Failed to assign content to schedule. Please try again.');
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
+  const handleScheduleChange = (scheduleId: number) => {
+    setSelectedSchedule(scheduleId);
+    setSelectedDate('');
+    setSelectedTimeSlot(null);
+    setAvailableTimeSlots([]);
+  };
+
+  const handleDateChange = (date: string) => {
+    setSelectedDate(date);
+    setSelectedTimeSlot(null);
+  };
+
+  const handleTimeSlotChange = (timeSlotId: number) => {
+    setSelectedTimeSlot(timeSlotId);
   };
 
   if (!isOpen) return null;
@@ -411,7 +522,7 @@ export default function ContentForm({
                       <div className="mb-4">
                         <p className="text-sm font-medium text-black-medium mb-2">Media files to be created:</p>
                         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                          {mediaFiles.map((media, index) => (
+                          {mediaFiles.map((media) => (
                             <div key={media.id} className="border border-[#ef5a29]/20 rounded-lg p-4 bg-[#fef7f5]">
                               <div className="flex items-start justify-between mb-3">
                                 <div className="flex items-center space-x-2">
@@ -422,7 +533,7 @@ export default function ContentForm({
                                   </span>
                                 </div>
                                 <button
-                                  onClick={() => setMediaFiles(prev => prev.filter((_, i) => i !== index))}
+                                  onClick={() => setMediaFiles(prev => prev.filter(m => m.id !== media.id))}
                                   className="p-1 text-black-muted hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -443,39 +554,21 @@ export default function ContentForm({
                     )
                   )}
 
-                  {/* Add New Media - Show for both create and edit */}
+                  {/* File Upload Component */}
                   <div className="border border-gray-200 rounded-md p-4 bg-gray-50">
                     <h5 className="text-sm font-medium text-black-medium mb-3">
-                      {isEdit ? 'Add New Media' : 'Add Media Files'}
+                      {isEdit ? 'Add New Media Files' : 'Upload Media Files'}
                     </h5>
-                    <div className="space-y-3">
-                      <Input
-                        type="text"
-                        placeholder="Enter media path or URL"
-                        value={newMediaPath}
-                        onChange={(e) => setNewMediaPath(e.target.value)}
-                      />
-                      <div className="flex items-center space-x-3">
-                        <select
-                          value={newMediaType}
-                          onChange={(e) => setNewMediaType(e.target.value as 'reel' | 'story' | 'image')}
-                          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
-                        >
-                          <option value="image">Image</option>
-                          <option value="reel">Reel</option>
-                          <option value="story">Story</option>
-                        </select>
-                        <Button
-                          type="button"
-                          onClick={handleAddMedia}
-                          disabled={!newMediaPath.trim()}
-                          className="bg-[#ef5a29] text-white hover:bg-[#d4491f] px-4 py-2 rounded-md font-medium disabled:opacity-50 flex items-center gap-2"
-                        >
-                          <Upload className="h-4 w-4" />
-                          {isEdit ? 'Add Media' : 'Add Media'}
-                        </Button>
-                      </div>
-                    </div>
+                    <FileUpload
+                      onFilesSelected={handleFilesSelected}
+                      onUpload={handleFileUpload}
+                      multiple={true}
+                      maxFiles={10}
+                      maxSize={50}
+                      disabled={isSubmitting}
+                      isUploading={isUploadingMedia}
+                      contentType={watch('type')}
+                    />
                   </div>
                 </div>
 
@@ -496,6 +589,130 @@ export default function ContentForm({
                   {isSubmitting ? 'Saving...' : (isEdit ? 'Update Content' : 'Create Content')}
                 </Button>
               </div>
+
+              {/* Schedule Assignment Section - Available for all content */}
+              <div className="border-t border-gray-200 pt-6 mt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h4 className="text-lg font-medium text-black-medium">
+                        Schedule Assignment
+                      </h4>
+                      {!isEdit && (
+                        <p className="text-sm text-gray-600 mt-1">
+                          Save the content first, then assign it to a schedule
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => setShowScheduleAssignment(!showScheduleAssignment)}
+                      className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-md font-medium"
+                    >
+                      {showScheduleAssignment ? 'Hide Assignment' : 'Assign to Schedule'}
+                    </Button>
+                  </div>
+
+                  {showScheduleAssignment && (
+                    <div className="space-y-4">
+                      {/* Schedule Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-black-medium mb-2">
+                          Select Schedule
+                        </label>
+                        <select
+                          value={selectedSchedule || ''}
+                          onChange={(e) => handleScheduleChange(Number(e.target.value))}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Choose a schedule...</option>
+                          {schedules.map((schedule) => (
+                            <option key={schedule.id} value={schedule.id}>
+                              {schedule.name} ({schedule.account.name})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Date Selection */}
+                      {selectedSchedule && (
+                        <div>
+                          <label className="block text-sm font-medium text-black-medium mb-2">
+                            Select Date
+                          </label>
+                          <input
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => handleDateChange(e.target.value)}
+                            min={new Date().toISOString().split('T')[0]}
+                            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      )}
+
+                      {/* Time Slot Selection */}
+                      {selectedSchedule && selectedDate && (
+                        <div>
+                          <label className="block text-sm font-medium text-black-medium mb-2">
+                            Available Time Slots
+                          </label>
+                          {isLoadingTimeSlots ? (
+                            <div className="text-center py-4">
+                              <div className="text-gray-500">Loading available time slots...</div>
+                            </div>
+                          ) : availableTimeSlots.length > 0 ? (
+                            <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto">
+                              {availableTimeSlots.map((slot) => (
+                                <label
+                                  key={slot.id}
+                                  className={`flex items-center p-3 border rounded-md cursor-pointer transition-colors ${
+                                    selectedTimeSlot === slot.id
+                                      ? 'border-blue-500 bg-blue-50'
+                                      : 'border-gray-200 hover:border-gray-300'
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="timeSlot"
+                                    value={slot.id}
+                                    checked={selectedTimeSlot === slot.id}
+                                    onChange={() => handleTimeSlotChange(slot.id)}
+                                    className="mr-3"
+                                  />
+                                  <div className="flex-1">
+                                    <div className="font-medium text-sm">
+                                      {slot.startTime} - {slot.endTime}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                      {slot.label} • {slot.postType}
+                                    </div>
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-4 text-gray-500">
+                              No available time slots for this date
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Assignment Button */}
+                      {selectedSchedule && selectedDate && selectedTimeSlot && (
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            onClick={handleScheduleAssignment}
+                            disabled={isAssigning}
+                            className="bg-green-600 text-white hover:bg-green-700 px-4 py-2 rounded-md font-medium disabled:opacity-50"
+                          >
+                            {isAssigning ? 'Assigning...' : (isEdit ? 'Assign to Schedule' : 'Save Content First')}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
             </form>
           </div>
         </div>

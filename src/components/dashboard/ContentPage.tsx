@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Edit2, Trash2, FileText, Filter, Image, Video, Calendar, Instagram } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
 import { contentApi, igAccountsApi, instagramApi } from '@/lib/api';
 import ContentForm from './ContentForm';
 import MediaViewer from './MediaViewer';
@@ -57,11 +56,10 @@ export default function ContentPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [postingId, setPostingId] = useState<number | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingContent, setEditingContent] = useState<Content | null>(null);
   const [isMediaViewerOpen, setIsMediaViewerOpen] = useState(false);
   const [selectedContentForMedia, setSelectedContentForMedia] = useState<Content | null>(null);
 
-  const fetchContent = async () => {
+  const fetchContent = useCallback(async () => {
     try {
       setIsLoading(true);
       const response = await contentApi.getAll({
@@ -76,7 +74,7 @@ export default function ContentPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filters, page]);
 
   const fetchAccounts = async () => {
     try {
@@ -93,24 +91,20 @@ export default function ContentPage() {
 
   useEffect(() => {
     fetchContent();
-  }, [filters, page]);
+  }, [filters, page, fetchContent]);
 
   const handleCreateContent = async (data: any) => {
     try {
-      const { mediaFiles, ...contentData } = data;
+      const { selectedFiles, ...contentData } = data;
       const createdContent = await contentApi.create(contentData);
       
-      // Add media files if any were added during creation
-      if (mediaFiles && mediaFiles.length > 0) {
-        for (const media of mediaFiles) {
-          await contentApi.addMedia(createdContent.data.id, {
-            fileName: media.fileName,
-            filePath: media.filePath,
-            fileSize: media.fileSize,
-            mimeType: media.mimeType,
-            mediaType: media.mediaType,
-          });
-        }
+      // Add media files if any were selected during creation
+      if (selectedFiles && selectedFiles.length > 0) {
+        const formData = new FormData();
+        selectedFiles.forEach((file: File, index: number) => {
+          formData.append('mediaFiles', file);
+        });
+        await contentApi.uploadMedia(createdContent.data.id, formData);
       }
       
       await fetchContent();
@@ -123,18 +117,6 @@ export default function ContentPage() {
     }
   };
 
-  const handleUpdateContent = async (data: any) => {
-    if (!editingContent) return;
-    
-    try {
-      await contentApi.update(editingContent.id, data);
-      await fetchContent();
-      setEditingContent(null);
-    } catch (error) {
-      console.error('Failed to update content:', error);
-      throw error;
-    }
-  };
 
   const handleDeleteContent = async (id: number) => {
     if (!confirm('Are you sure you want to delete this content?')) return;
@@ -156,7 +138,6 @@ export default function ContentPage() {
 
   const handleFormClose = () => {
     setIsFormOpen(false);
-    setEditingContent(null);
   };
 
   const handleViewMedia = (content: Content) => {
@@ -475,23 +456,13 @@ export default function ContentPage() {
         </>
       )}
 
-      {/* Content Form Modal */}
+      {/* Content Form Modal - Only for Creation */}
       <ContentForm
         isOpen={isFormOpen}
         onClose={handleFormClose}
-        onSubmit={editingContent ? handleUpdateContent : handleCreateContent}
-        initialData={editingContent ? {
-          id: editingContent.id,
-          accountId: editingContent.accountId,
-          caption: editingContent.caption,
-          hashTags: Array.isArray(editingContent.hashTags) ? editingContent.hashTags.join(', ') : editingContent.hashTags,
-          generatedSource: editingContent.generatedSource,
-          usedTopics: editingContent.usedTopics,
-          tone: editingContent.tone,
-          type: editingContent.type,
-          status: editingContent.status,
-        } : undefined}
-        isEdit={!!editingContent}
+        onSubmit={handleCreateContent}
+        initialData={undefined}
+        isEdit={false}
         accounts={accounts}
       />
 

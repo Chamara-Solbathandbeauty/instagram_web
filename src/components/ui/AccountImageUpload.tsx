@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Upload, X, Image as ImageIcon, Trash2, GripVertical } from 'lucide-react';
+import { Upload, Image as ImageIcon, Trash2, GripVertical } from 'lucide-react';
 import { Button } from './Button';
 
 interface AccountImage {

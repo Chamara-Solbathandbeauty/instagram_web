@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Users, UserPlus, Shield, Ban } from 'lucide-react';
 import api from '@/lib/api';
+import { useAuthStore } from '@/lib/auth';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 
@@ -17,9 +18,12 @@ interface User {
 }
 
 export default function UsersPage() {
+  const { user: currentUser } = useAuthStore();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  const isAdmin = currentUser?.role === 'admin';
 
   useEffect(() => {
     fetchUsers();
@@ -67,10 +71,12 @@ export default function UsersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Users Management</h1>
-        <Button className="flex items-center space-x-2">
-          <UserPlus className="h-4 w-4" />
-          <span>Add User</span>
-        </Button>
+        {isAdmin && (
+          <Button className="flex items-center space-x-2">
+            <UserPlus className="h-4 w-4" />
+            <span>Add User</span>
+          </Button>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -187,12 +193,18 @@ export default function UsersPage() {
                       {new Date(user.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button className="text-blue-600 hover:text-blue-900 mr-4">
-                        Edit
-                      </button>
-                      <button className="text-red-600 hover:text-red-900">
-                        Delete
-                      </button>
+                      {isAdmin ? (
+                        <>
+                          <button className="text-blue-600 hover:text-blue-900 mr-4">
+                            Edit
+                          </button>
+                          <button className="text-red-600 hover:text-red-900">
+                            Delete
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-gray-400">View Only</span>
+                      )}
                     </td>
                   </tr>
                 ))}

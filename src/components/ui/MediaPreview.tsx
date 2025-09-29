@@ -151,13 +151,24 @@ export default function MediaPreview({
               <Download className="h-3 w-3 mr-1" />
               Download
             </Button>
-            {onRegenerate && (
+            {onRegenerate && media.prompt && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowRegenerateModal(true)}
                 className="text-[#ef5a29] hover:text-[#d4491f] hover:bg-[#fef7f5]"
-                title="Re-generate with AI"
+                title="Re-generate with AI (requires prompt)"
+              >
+                <Sparkles className="h-3 w-3" />
+              </Button>
+            )}
+            {onRegenerate && !media.prompt && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled
+                className="text-gray-400 cursor-not-allowed"
+                title="Re-generate not available - no prompt found"
               >
                 <Sparkles className="h-3 w-3" />
               </Button>

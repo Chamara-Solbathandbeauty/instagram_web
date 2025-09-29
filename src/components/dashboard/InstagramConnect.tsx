@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Instagram, Check, X, AlertCircle, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -37,7 +37,7 @@ export default function InstagramConnect({
   const [error, setError] = useState<string | null>(null);
 
   // Load Instagram connection status
-  const loadStatus = async () => {
+  const loadStatus = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -50,7 +50,7 @@ export default function InstagramConnect({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [accountId, onStatusChange]);
 
   // Connect to Instagram
   const handleConnect = async () => {
@@ -143,7 +143,7 @@ export default function InstagramConnect({
       // Normal load
       loadStatus();
     }
-  }, [accountId, searchParams]);
+  }, [accountId, searchParams, loadStatus]);
 
   if (isLoading) {
     return (

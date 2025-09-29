@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { X, Image } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { contentApi } from '@/lib/api';
@@ -32,7 +32,7 @@ export default function MediaViewer({
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const loadMediaFiles = async () => {
+  const loadMediaFiles = useCallback(async () => {
     try {
       setIsLoading(true);
       const response = await contentApi.getMedia(contentId);
@@ -42,13 +42,13 @@ export default function MediaViewer({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [contentId]);
 
   useEffect(() => {
     if (isOpen && contentId) {
       loadMediaFiles();
     }
-  }, [isOpen, contentId]);
+  }, [isOpen, contentId, loadMediaFiles]);
 
 
   if (!isOpen) return null;

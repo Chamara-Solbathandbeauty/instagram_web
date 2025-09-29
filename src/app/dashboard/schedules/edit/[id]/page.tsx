@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { X, Plus, Trash2, Clock, Calendar, Sparkles, Wand2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Clock, Calendar, Wand2, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { aiApi } from '@/lib/api';
+import { schedulesApi, igAccountsApi, aiApi } from '@/lib/api';
+import AppLayout from '@/components/layout/AppLayout';
 
 const timeSlotSchema = z.object({
   startTime: z.string().min(1, 'Start time is required'),
@@ -40,15 +42,6 @@ interface IgAccount {
   type: 'business' | 'creator';
 }
 
-interface ScheduleFormProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (data: ScheduleFormData) => Promise<void>;
-  initialData?: Partial<ScheduleFormData & { id?: number }>;
-  isEdit?: boolean;
-  accounts: IgAccount[];
-}
-
 const DAYS_OF_WEEK = [
   { value: 0, label: 'Sunday' },
   { value: 1, label: 'Monday' },
@@ -65,19 +58,17 @@ const CONTENT_TYPES = [
   { value: 'story', label: 'Story', icon: '📱' },
 ];
 
-export default function ScheduleForm({ 
-  isOpen, 
-  onClose, 
-  onSubmit, 
-  initialData, 
-  isEdit = false,
-  accounts 
-}: ScheduleFormProps) {
+export default function EditSchedulePage() {
+  const params = useParams();
+  const router = useRouter();
+  const scheduleId = params.id as string;
+
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
   const [nextGeneratableWeek, setNextGeneratableWeek] = useState<string | null>(null);
-  const [showScheduleGenerationModal, setShowScheduleGenerationModal] = useState(false);
+  const [accounts, setAccounts] = useState<IgAccount[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showContentGenerationModal, setShowContentGenerationModal] = useState(false);
   const [userInstructions, setUserInstructions] = useState('');
 
   const {
@@ -85,12 +76,11 @@ export default function ScheduleForm({
     handleSubmit,
     formState: { errors },
     reset,
-    watch,
     control,
   } = useForm({
     resolver: zodResolver(scheduleSchema),
     defaultValues: {
-      accountId: accounts.length > 0 ? accounts[0].id : 0,
+      accountId: 0,
       name: '',
       description: '',
       frequency: 'daily' as const,
@@ -118,22 +108,24 @@ export default function ScheduleForm({
     name: 'timeSlots',
   });
 
-
-  // Reset form with initial data when it changes
-  useEffect(() => {
-    if (initialData) {
+  const fetchSchedule = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const response = await schedulesApi.getById(parseInt(scheduleId));
+      const schedule = response.data;
+      
       reset({
-        accountId: initialData.accountId || accounts.length > 0 ? accounts[0].id : 0,
-        name: initialData.name || '',
-        description: initialData.description || '',
-        frequency: initialData.frequency || 'daily',
-        status: initialData.status || 'active',
-        isEnabled: initialData.isEnabled ?? true,
-        startDate: initialData.startDate || '',
-        endDate: initialData.endDate || '',
-        customDays: initialData.customDays || [],
-        timezone: initialData.timezone || 'UTC',
-        timeSlots: initialData.timeSlots || [
+        accountId: schedule.accountId,
+        name: schedule.name,
+        description: schedule.description || '',
+        frequency: schedule.frequency,
+        status: schedule.status,
+        isEnabled: schedule.isEnabled,
+        startDate: schedule.startDate || '',
+        endDate: schedule.endDate || '',
+        customDays: schedule.customDays || [],
+        timezone: schedule.timezone,
+        timeSlots: schedule.timeSlots || [
           {
             startTime: '09:00',
             endTime: '17:00',
@@ -144,49 +136,49 @@ export default function ScheduleForm({
           }
         ],
       });
-    } else {
-      reset({
-        accountId: accounts.length > 0 ? accounts[0].id : 0,
-        name: '',
-        description: '',
-        frequency: 'daily',
-        status: 'active',
-        isEnabled: true,
-        startDate: '',
-        endDate: '',
-        customDays: [],
-        timezone: 'UTC',
-        timeSlots: [
-          {
-            startTime: '09:00',
-            endTime: '17:00',
-            dayOfWeek: 1,
-            postType: 'post_with_image' as const,
-            isEnabled: true,
-            label: 'Business Hours',
-          }
-        ],
-      });
+    } catch (error) {
+      console.error('Failed to fetch schedule:', error);
+      router.push('/dashboard/schedules');
+    } finally {
+      setIsLoading(false);
     }
-  }, [initialData, reset, accounts]);
+  }, [scheduleId, reset, router]);
+
+  const fetchAccounts = async () => {
+    try {
+      const response = await igAccountsApi.getAll();
+      setAccounts(response.data);
+    } catch (error) {
+      console.error('Failed to fetch accounts:', error);
+    }
+  };
+
+  const checkNextGeneratableWeek = useCallback(async () => {
+    try {
+      const response = await aiApi.getNextGeneratableWeek(parseInt(scheduleId));
+      setNextGeneratableWeek(response.data.data.nextWeek);
+    } catch (error) {
+      console.error('Error checking next generatable week:', error);
+      setNextGeneratableWeek(null);
+    }
+  }, [scheduleId]);
+
+  useEffect(() => {
+    fetchSchedule();
+    fetchAccounts();
+    checkNextGeneratableWeek();
+  }, [fetchSchedule, checkNextGeneratableWeek]);
 
   const handleFormSubmit = async (data: ScheduleFormData) => {
     setIsSubmitting(true);
     try {
-      console.log('Submitting schedule data:', JSON.stringify(data, null, 2));
-      await onSubmit(data);
-      reset();
-      onClose();
+      await schedulesApi.update(parseInt(scheduleId), data);
+      router.push('/dashboard/schedules');
     } catch (error) {
-      console.error('Error submitting form:', error);
+      console.error('Error updating schedule:', error);
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleClose = () => {
-    reset();
-    onClose();
   };
 
   const addTimeSlot = () => {
@@ -200,105 +192,34 @@ export default function ScheduleForm({
     });
   };
 
-  const handleGenerateWithAIClick = () => {
-    const selectedAccountId = watch('accountId');
-    
-    if (!selectedAccountId) {
-      alert('Please select an Instagram account first');
+  const handleGenerateContentClick = () => {
+    if (!nextGeneratableWeek) {
+      alert('No week available for content generation. All weeks may already have content scheduled.');
       return;
     }
-    setShowScheduleGenerationModal(true);
+    setShowContentGenerationModal(true);
   };
-
-  const generateWithAI = async () => {
-    const selectedAccountId = watch('accountId');
-    
-    if (!selectedAccountId) {
-      alert('Please select an Instagram account first');
-      return;
-    }
-
-    setIsGeneratingAI(true);
-    setShowScheduleGenerationModal(false);
-    
-    try {
-      const response = await aiApi.generateSchedulePost({
-        accountId: selectedAccountId,
-        ...(userInstructions.trim() && { userInstructions: userInstructions.trim() })
-      });
-      const aiSchedule = response.data.data;
-
-      // Populate form with AI-generated data
-      reset({
-        accountId: selectedAccountId,
-        name: aiSchedule.name,
-        description: aiSchedule.description,
-        frequency: aiSchedule.frequency,
-        status: aiSchedule.status,
-        isEnabled: aiSchedule.isEnabled,
-        startDate: aiSchedule.startDate || '',
-        endDate: aiSchedule.endDate || '',
-        customDays: aiSchedule.frequency === 'custom' ? (aiSchedule.customDays || []) : undefined,
-        timezone: aiSchedule.timezone,
-        timeSlots: aiSchedule.timeSlots.map((slot: { startTime: string; endTime: string; dayOfWeek: number; postType: string; isEnabled: boolean; label: string }) => ({
-          startTime: slot.startTime.substring(0, 5), // Convert HH:MM:SS to HH:MM
-          endTime: slot.endTime.substring(0, 5),
-          dayOfWeek: slot.dayOfWeek,
-          postType: slot.postType,
-          isEnabled: slot.isEnabled !== undefined ? slot.isEnabled : true,
-          label: slot.label || '',
-        })),
-      });
-
-      // Clear instructions and show success message
-      setUserInstructions('');
-      alert('AI schedule generated successfully! Please review and adjust as needed.');
-    } catch (error) {
-      console.error('Error generating AI schedule:', error);
-      alert('Failed to generate AI schedule. Please try again.');
-    } finally {
-      setIsGeneratingAI(false);
-    }
-  };
-
-  const handleCloseScheduleModal = () => {
-    setShowScheduleGenerationModal(false);
-    setUserInstructions('');
-  };
-
-  const checkNextGeneratableWeek = useCallback(async () => {
-    if (!isEdit || !initialData?.id) return;
-    
-    try {
-      const response = await aiApi.getNextGeneratableWeek(initialData.id);
-      setNextGeneratableWeek(response.data.data.nextWeek);
-    } catch (error) {
-      console.error('Error checking next generatable week:', error);
-      setNextGeneratableWeek(null);
-    }
-  }, [isEdit, initialData?.id]);
 
   const generateContent = async () => {
-    if (!isEdit || !initialData?.id) {
-      alert('Content generation is only available for existing schedules');
-      return;
-    }
-
     if (!nextGeneratableWeek) {
       alert('No week available for content generation. All weeks may already have content scheduled.');
       return;
     }
 
     setIsGeneratingContent(true);
+    setShowContentGenerationModal(false);
+    
     try {
       const response = await aiApi.generateContent({
-        scheduleId: initialData.id,
-        generationWeek: nextGeneratableWeek
+        scheduleId: parseInt(scheduleId),
+        generationWeek: nextGeneratableWeek,
+        ...(userInstructions.trim() && { userInstructions: userInstructions.trim() })
       });
 
       alert(`Successfully generated ${response.data.data.generatedContent.length} content pieces for the week of ${nextGeneratableWeek}`);
       
-      // Refresh the next generatable week
+      // Clear instructions and refresh the next generatable week
+      setUserInstructions('');
       await checkNextGeneratableWeek();
     } catch (error) {
       console.error('Error generating content:', error);
@@ -308,81 +229,81 @@ export default function ScheduleForm({
     }
   };
 
-  // Check for next generatable week when editing
-  useEffect(() => {
-    if (isEdit && initialData?.id) {
-      checkNextGeneratableWeek();
-    }
-  }, [isEdit, initialData?.id, checkNextGeneratableWeek]);
+  const handleCloseModal = () => {
+    setShowContentGenerationModal(false);
+    setUserInstructions('');
+  };
 
-  if (!isOpen) return null;
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="max-w-4xl mx-auto p-6">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF014F] mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading schedule...</p>
+            </div>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
-        <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={handleClose} />
-        
-        <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-          <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-black-medium">
-                {isEdit ? 'Edit Posting Schedule' : 'Create Posting Schedule'}
-              </h3>
-              <div className="flex items-center gap-3">
-                {!isEdit && (
-                  <Button
-                    type="button"
-                    onClick={handleGenerateWithAIClick}
-                    disabled={isGeneratingAI || isSubmitting}
-                    className="bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    {isGeneratingAI ? 'Generating...' : 'Generate with AI'}
-                  </Button>
-                )}
-                {isEdit && nextGeneratableWeek && (
-                  <Button
-                    type="button"
-                    onClick={generateContent}
-                    disabled={isGeneratingContent || isSubmitting}
-                    className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <Wand2 className="h-4 w-4" />
-                    {isGeneratingContent ? 'Generating Content...' : 'Generate Content'}
-                  </Button>
-                )}
-                <button
-                  onClick={handleClose}
-                  className="text-black-muted hover:text-black-medium transition-colors"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
+    <AppLayout>
+      <div className="max-w-4xl mx-auto p-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-4">
+            <Button
+              variant="outline"
+              onClick={() => router.push('/dashboard/schedules')}
+              className="flex items-center"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Schedules
+            </Button>
+            <h1 className="text-2xl font-bold text-gray-900">Edit Posting Schedule</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            {nextGeneratableWeek && (
+              <Button
+                type="button"
+                onClick={handleGenerateContentClick}
+                disabled={isGeneratingContent || isSubmitting}
+                className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+              >
+                <Wand2 className="h-4 w-4" />
+                {isGeneratingContent ? 'Generating Content...' : 'Generate Content'}
+              </Button>
+            )}
+          </div>
+        </div>
 
-            <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
-              {/* Content Generation Info */}
-              {isEdit && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <Wand2 className="h-5 w-5 text-blue-600 mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="text-sm font-medium text-blue-900 mb-1">AI Content Generation</h4>
-                      {nextGeneratableWeek ? (
-                        <p className="text-sm text-blue-700">
-                          Content can be generated for the week starting <strong>{new Date(nextGeneratableWeek).toLocaleDateString()}</strong>. 
-                          Click "Generate Content" to create AI-generated posts, reels, and stories for this schedule.
-                        </p>
-                      ) : (
-                        <p className="text-sm text-blue-700">
-                          All available weeks have content scheduled. No content generation needed at this time.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
+        {/* Content Generation Info */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <Wand2 className="h-5 w-5 text-blue-600 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-blue-900 mb-1">AI Content Generation</h4>
+              {nextGeneratableWeek ? (
+                <p className="text-sm text-blue-700">
+                  Content can be generated for the week starting <strong>{new Date(nextGeneratableWeek).toLocaleDateString()}</strong>. 
+                  Click "Generate Content" to create AI-generated posts, reels, and stories for this schedule.
+                </p>
+              ) : (
+                <p className="text-sm text-blue-700">
+                  All available weeks have content scheduled. No content generation needed at this time.
+                </p>
               )}
+            </div>
+          </div>
+        </div>
 
+        {/* Form */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+          <div className="p-6">
+            <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
               {/* Basic Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -392,7 +313,7 @@ export default function ScheduleForm({
                   <select
                     id="accountId"
                     {...register('accountId', { valueAsNumber: true })}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29] focus:ring-offset-2"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F] focus:ring-offset-2"
                   >
                     {accounts.map((account) => (
                       <option key={account.id} value={account.id}>
@@ -428,7 +349,7 @@ export default function ScheduleForm({
                   rows={3}
                   placeholder="Describe this posting schedule..."
                   {...register('description')}
-                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ef5a29] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF014F] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
                 />
                 {errors.description && (
                   <p className="mt-1 text-sm text-red-500">{errors.description.message}</p>
@@ -444,7 +365,7 @@ export default function ScheduleForm({
                   <select
                     id="frequency"
                     {...register('frequency')}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29] focus:ring-offset-2"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F] focus:ring-offset-2"
                   >
                     <option value="daily">Daily</option>
                     <option value="weekly">Weekly</option>
@@ -459,7 +380,7 @@ export default function ScheduleForm({
                   <select
                     id="status"
                     {...register('status')}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29] focus:ring-offset-2"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F] focus:ring-offset-2"
                   >
                     <option value="active">Active</option>
                     <option value="paused">Paused</option>
@@ -472,7 +393,7 @@ export default function ScheduleForm({
                     type="checkbox"
                     id="isEnabled"
                     {...register('isEnabled')}
-                    className="h-4 w-4 text-[#ef5a29] focus:ring-[#ef5a29] border-gray-300 rounded"
+                    className="h-4 w-4 text-[#FF014F] focus:ring-[#FF014F] border-gray-300 rounded"
                   />
                   <label htmlFor="isEnabled" className="ml-2 text-sm font-medium text-black-medium">
                     Enable Schedule
@@ -507,18 +428,17 @@ export default function ScheduleForm({
                 </div>
               </div>
 
-
               {/* Time Slots */}
               <div className="border-t border-gray-200 pt-6">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="text-md font-medium text-black-medium flex items-center gap-2">
-                    <Clock className="h-5 w-5 text-[#ef5a29]" />
+                    <Clock className="h-5 w-5 text-[#FF014F]" />
                     Time Slots
                   </h4>
                   <Button
                     type="button"
                     onClick={addTimeSlot}
-                    className="bg-[#ef5a29] text-white hover:bg-[#d4491f] px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2"
+                    className="bg-[#FF014F] text-white hover:bg-[#d4491f] px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2"
                   >
                     <Plus className="h-4 w-4" />
                     Add Time Slot
@@ -530,7 +450,7 @@ export default function ScheduleForm({
                     <div key={field.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-[#ef5a29]" />
+                          <Calendar className="h-4 w-4 text-[#FF014F]" />
                           <span className="text-sm font-medium text-black-medium">
                             Time Slot {index + 1}
                           </span>
@@ -551,7 +471,7 @@ export default function ScheduleForm({
                           </label>
                           <select
                             {...register(`timeSlots.${index}.dayOfWeek`, { valueAsNumber: true })}
-                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
+                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F]"
                           >
                             {DAYS_OF_WEEK.map((day) => (
                               <option key={day.value} value={day.value}>
@@ -589,7 +509,7 @@ export default function ScheduleForm({
                           </label>
                           <select
                             {...register(`timeSlots.${index}.postType`)}
-                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
+                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F]"
                           >
                             {CONTENT_TYPES.map((type) => (
                               <option key={type.value} value={type.value}>
@@ -622,7 +542,7 @@ export default function ScheduleForm({
               <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
                 <Button
                   type="button"
-                  onClick={handleClose}
+                  onClick={() => router.push('/dashboard/schedules')}
                   disabled={isSubmitting}
                   className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-4 py-2 rounded-md font-medium"
                 >
@@ -631,9 +551,9 @@ export default function ScheduleForm({
                 <Button
                   type="submit"
                   disabled={isSubmitting}
-                  className="bg-[#ef5a29] text-white hover:bg-[#d4491f] px-4 py-2 rounded-md font-medium disabled:opacity-50"
+                  className="bg-[#FF014F] text-white hover:bg-[#d4491f] px-4 py-2 rounded-md font-medium disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Saving...' : (isEdit ? 'Update Schedule' : 'Create Schedule')}
+                  {isSubmitting ? 'Updating...' : 'Update Schedule'}
                 </Button>
               </div>
             </form>
@@ -641,21 +561,21 @@ export default function ScheduleForm({
         </div>
       </div>
 
-      {/* Schedule Generation Modal */}
-      {showScheduleGenerationModal && (
+      {/* Content Generation Modal */}
+      {showContentGenerationModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
-            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={handleCloseScheduleModal} />
+            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={handleCloseModal} />
             
             <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
               <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-lg font-semibold text-black-medium flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-purple-600" />
-                    Generate Schedule with AI
+                    <Wand2 className="h-5 w-5 text-blue-600" />
+                    Generate Content
                   </h3>
                   <button
-                    onClick={handleCloseScheduleModal}
+                    onClick={handleCloseModal}
                     className="text-black-muted hover:text-black-medium transition-colors"
                   >
                     <X className="h-5 w-5" />
@@ -670,21 +590,23 @@ export default function ScheduleForm({
                     <textarea
                       id="userInstructions"
                       rows={4}
-                      placeholder="Add specific instructions for schedule generation... (e.g., 'Focus on morning posts', 'Include more reels', 'Schedule only on weekdays', 'Create a minimalist posting schedule')"
+                      placeholder="Add specific instructions for content generation... (e.g., 'Focus on eco-friendly topics', 'Use a professional tone', 'Include trending hashtags')"
                       value={userInstructions}
                       onChange={(e) => setUserInstructions(e.target.value)}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29] focus:ring-offset-2 resize-none"
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F] focus:ring-offset-2 resize-none"
                     />
                     <p className="mt-1 text-xs text-gray-500">
-                      These instructions will be added to the AI prompt to customize your schedule generation.
+                      These instructions will be added to the AI prompt to customize your content generation.
                     </p>
                   </div>
 
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <div className="flex items-start gap-2">
-                      <Sparkles className="h-4 w-4 text-purple-600 mt-0.5" />
-                      <div className="text-sm text-purple-700">
-                        <strong>AI Schedule Generation:</strong> The AI will create an optimized posting schedule based on your account type, best practices, and any custom instructions you provide.
+                      <Wand2 className="h-4 w-4 text-blue-600 mt-0.5" />
+                      <div className="text-sm text-blue-700">
+                        <strong>Week:</strong> {nextGeneratableWeek ? new Date(nextGeneratableWeek).toLocaleDateString() : 'N/A'}
+                        <br />
+                        <strong>Content:</strong> Posts, Reels, and Stories will be generated based on your schedule settings.
                       </div>
                     </div>
                   </div>
@@ -693,20 +615,20 @@ export default function ScheduleForm({
                 <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-200">
                   <Button
                     type="button"
-                    onClick={handleCloseScheduleModal}
-                    disabled={isGeneratingAI}
+                    onClick={handleCloseModal}
+                    disabled={isGeneratingContent}
                     className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-4 py-2 rounded-md font-medium"
                   >
                     Cancel
                   </Button>
                   <Button
                     type="button"
-                    onClick={generateWithAI}
-                    disabled={isGeneratingAI}
-                    className="bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 px-4 py-2 rounded-md font-medium flex items-center gap-2 disabled:opacity-50"
+                    onClick={generateContent}
+                    disabled={isGeneratingContent}
+                    className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 px-4 py-2 rounded-md font-medium flex items-center gap-2 disabled:opacity-50"
                   >
-                    <Sparkles className="h-4 w-4" />
-                    {isGeneratingAI ? 'Generating...' : 'Generate Schedule'}
+                    <Wand2 className="h-4 w-4" />
+                    {isGeneratingContent ? 'Generating...' : 'Generate Content'}
                   </Button>
                 </div>
               </div>
@@ -714,6 +636,6 @@ export default function ScheduleForm({
           </div>
         </div>
       )}
-    </div>
+    </AppLayout>
   );
 }

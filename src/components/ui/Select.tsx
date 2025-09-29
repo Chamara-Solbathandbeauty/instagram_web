@@ -50,9 +50,7 @@ export const Select: React.FC<SelectProps> = ({
   value,
   onValueChange,
   children,
-  placeholder,
   className = '',
-  disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement>(null);

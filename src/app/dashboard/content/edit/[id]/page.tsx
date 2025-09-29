@@ -5,11 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowLeft, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { contentApi, igAccountsApi } from '@/lib/api';
+import { contentApi, igAccountsApi, schedulesApi, scheduleContentApi } from '@/lib/api';
 import MediaPreview from '@/components/ui/MediaPreview';
+import FileUpload from '@/components/ui/FileUpload';
 import AppLayout from '@/components/layout/AppLayout';
 
 const contentSchema = z.object({
@@ -53,6 +54,17 @@ export default function EditContentPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingMedia, setIsLoadingMedia] = useState(false);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  
+  // Schedule assignment state
+  const [showScheduleAssignment, setShowScheduleAssignment] = useState(false);
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<any[]>([]);
+  const [selectedSchedule, setSelectedSchedule] = useState<number | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<number | null>(null);
+  const [isLoadingTimeSlots, setIsLoadingTimeSlots] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
 
   const {
     register,
@@ -151,6 +163,34 @@ export default function EditContentPage() {
     }
   };
 
+  // Handle file upload (replaces existing media)
+  const handleFileUpload = async (files: File[], prompt?: string) => {
+    try {
+      setIsUploadingMedia(true);
+      
+      // Create FormData for file upload
+      const formData = new FormData();
+      files.forEach((file: File, index: number) => {
+        formData.append('mediaFiles', file);
+      });
+      
+      if (prompt) {
+        formData.append('prompt', prompt);
+      }
+
+      // Replace existing media with new files
+      await contentApi.replaceMedia(contentId, formData);
+      
+      // Reload media files
+      await loadMediaFiles();
+    } catch (error) {
+      console.error('Failed to replace media:', error);
+      throw error;
+    } finally {
+      setIsUploadingMedia(false);
+    }
+  };
+
   // Handle content deletion
   const handleDeleteContent = async () => {
     if (!confirm('Are you sure you want to delete this content? This action cannot be undone.')) {
@@ -164,6 +204,91 @@ export default function EditContentPage() {
       console.error('Failed to delete content:', error);
     }
   };
+
+  // Schedule assignment functions
+  const handleScheduleAssignment = async () => {
+    if (!selectedSchedule || !selectedTimeSlot || !selectedDate) {
+      alert('Please select a schedule, date, and time slot');
+      return;
+    }
+
+    try {
+      setIsAssigning(true);
+      await scheduleContentApi.assignToTimeSlot({
+        scheduleId: selectedSchedule,
+        timeSlotId: selectedTimeSlot,
+        contentId: contentId,
+        scheduledDate: selectedDate,
+      });
+      
+      alert('Content successfully assigned to schedule!');
+      setShowScheduleAssignment(false);
+      // Reset selections
+      setSelectedSchedule(null);
+      setSelectedDate('');
+      setSelectedTimeSlot(null);
+      setAvailableTimeSlots([]);
+      // Reload content to show updated schedule information
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to assign content to schedule:', error);
+      alert('Failed to assign content to schedule. Please try again.');
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
+  const handleScheduleChange = (scheduleId: number) => {
+    setSelectedSchedule(scheduleId);
+    setSelectedDate('');
+    setSelectedTimeSlot(null);
+    setAvailableTimeSlots([]);
+  };
+
+  const handleDateChange = (date: string) => {
+    setSelectedDate(date);
+    setSelectedTimeSlot(null);
+  };
+
+  const handleTimeSlotChange = (timeSlotId: number) => {
+    setSelectedTimeSlot(timeSlotId);
+  };
+
+  // Fetch schedules when component mounts
+  useEffect(() => {
+    const fetchSchedules = async () => {
+      try {
+        const response = await schedulesApi.getAll();
+        setSchedules(response.data.schedules);
+      } catch (error) {
+        console.error('Failed to fetch schedules:', error);
+      }
+    };
+    
+    fetchSchedules();
+  }, []);
+
+  // Fetch available time slots when schedule and date are selected
+  useEffect(() => {
+    const fetchAvailableTimeSlots = async () => {
+      if (!selectedSchedule || !selectedDate) return;
+      
+      try {
+        setIsLoadingTimeSlots(true);
+        const response = await scheduleContentApi.getAvailableTimeSlots(selectedSchedule, selectedDate);
+        setAvailableTimeSlots(response.data);
+      } catch (error) {
+        console.error('Failed to fetch available time slots:', error);
+        setAvailableTimeSlots([]);
+      } finally {
+        setIsLoadingTimeSlots(false);
+      }
+    };
+    
+    if (selectedSchedule && selectedDate) {
+      fetchAvailableTimeSlots();
+    }
+  }, [selectedSchedule, selectedDate]);
 
   if (isLoading) {
     return (
@@ -214,6 +339,192 @@ export default function EditContentPage() {
             <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </Button>
+        </div>
+
+        {/* Schedule Information */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <h3 className="text-lg font-semibold text-blue-900 mb-3 flex items-center">
+            <Calendar className="h-5 w-5 mr-2" />
+            Schedule Information
+          </h3>
+          
+          {content.scheduleContent && content.scheduleContent.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {content.scheduleContent.map((scheduleContent: any, index: number) => (
+                <div key={index} className="bg-white rounded-md p-4 border border-blue-100">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-600">Schedule:</span>
+                      <span className="text-sm font-semibold text-blue-900">
+                        {scheduleContent.schedule?.name || 'Unknown Schedule'}
+                      </span>
+                    </div>
+                    
+                    {scheduleContent.timeSlot && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-600">Time Slot:</span>
+                        <span className="text-sm text-blue-800">
+                          {scheduleContent.timeSlot.startTime} - {scheduleContent.timeSlot.endTime}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-600">Scheduled Date:</span>
+                      <span className="text-sm text-blue-800">
+                        {new Date(scheduleContent.scheduledDate).toLocaleDateString()}
+                      </span>
+                    </div>
+                    
+                    {scheduleContent.scheduledTime && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-600">Scheduled Time:</span>
+                        <span className="text-sm text-blue-800">
+                          {scheduleContent.scheduledTime}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-600">Status:</span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        scheduleContent.status === 'published' ? 'bg-green-100 text-green-800' :
+                        scheduleContent.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
+                        scheduleContent.status === 'queued' ? 'bg-yellow-100 text-yellow-800' :
+                        scheduleContent.status === 'failed' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {scheduleContent.status}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white rounded-md p-4 border border-blue-100">
+              <p className="text-sm text-gray-600 text-center">
+                This content is not currently scheduled for any posting schedule.
+              </p>
+            </div>
+          )}
+          
+          {/* Schedule Assignment Section */}
+          <div className="mt-4 pt-4 border-t border-blue-200">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-md font-semibold text-blue-900">
+                Assign to Schedule
+              </h4>
+              <Button
+                type="button"
+                onClick={() => setShowScheduleAssignment(!showScheduleAssignment)}
+                className="bg-blue-600 text-white hover:bg-blue-700 px-3 py-2 rounded-md text-sm font-medium"
+              >
+                {showScheduleAssignment ? 'Hide Assignment' : 'Assign to Schedule'}
+              </Button>
+            </div>
+
+            {showScheduleAssignment && (
+              <div className="space-y-4">
+                {/* Schedule Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Schedule
+                  </label>
+                  <select
+                    value={selectedSchedule || ''}
+                    onChange={(e) => handleScheduleChange(Number(e.target.value))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Choose a schedule...</option>
+                    {schedules.map((schedule) => (
+                      <option key={schedule.id} value={schedule.id}>
+                        {schedule.name} ({schedule.account.name})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Date Selection */}
+                {selectedSchedule && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Date
+                    </label>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => handleDateChange(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
+
+                {/* Time Slot Selection */}
+                {selectedSchedule && selectedDate && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Available Time Slots
+                    </label>
+                    {isLoadingTimeSlots ? (
+                      <div className="text-center py-4">
+                        <div className="text-gray-500">Loading available time slots...</div>
+                      </div>
+                    ) : availableTimeSlots.length > 0 ? (
+                      <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto">
+                        {availableTimeSlots.map((slot) => (
+                          <label
+                            key={slot.id}
+                            className={`flex items-center p-3 border rounded-md cursor-pointer transition-colors ${
+                              selectedTimeSlot === slot.id
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="timeSlot"
+                              value={slot.id}
+                              checked={selectedTimeSlot === slot.id}
+                              onChange={() => handleTimeSlotChange(slot.id)}
+                              className="mr-3"
+                            />
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">
+                                {slot.startTime} - {slot.endTime}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {slot.label} • {slot.postType}
+                              </div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-gray-500">
+                        No available time slots for this date
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Assignment Button */}
+                {selectedSchedule && selectedDate && selectedTimeSlot && (
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      onClick={handleScheduleAssignment}
+                      disabled={isAssigning}
+                      className="bg-green-600 text-white hover:bg-green-700 px-4 py-2 rounded-md font-medium disabled:opacity-50"
+                    >
+                      {isAssigning ? 'Assigning...' : 'Assign to Schedule'}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -380,6 +691,24 @@ export default function EditContentPage() {
               ) : (
                 <p className="text-gray-500 text-center py-4">No media files attached</p>
               )}
+
+              {/* File Upload Section */}
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <h3 className="text-md font-medium text-gray-900 mb-2">Replace Media Files</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Uploading new media will replace all existing media files for this content.
+                </p>
+                <FileUpload
+                  onFilesSelected={() => {}} // Not needed for edit page
+                  onUpload={handleFileUpload}
+                  multiple={true}
+                  maxFiles={10}
+                  maxSize={50}
+                  disabled={isSaving}
+                  isUploading={isUploadingMedia}
+                  contentType={content?.type}
+                />
+              </div>
             </div>
           </div>
         </div>

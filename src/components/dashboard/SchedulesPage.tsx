@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Calendar, Clock, Target, Play, Pause, Filter, Eye } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Plus, Edit2, Trash2, Calendar, Clock, Play, Pause, Filter, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
 import { schedulesApi, igAccountsApi } from '@/lib/api';
-import ScheduleForm from './ScheduleForm';
 
 const CONTENT_TYPES = [
   { value: 'post_with_image', label: 'Post with Image', icon: '📸' },
@@ -60,19 +59,9 @@ interface ScheduleFilters {
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-const CONTENT_TYPE_ICONS = {
-  post_with_image: '📸',
-  reel: '🎬',
-  story: '📱',
-};
-
-const CONTENT_TYPE_LABELS = {
-  post_with_image: 'Post',
-  reel: 'Reel',
-  story: 'Story',
-};
 
 export default function SchedulesPage() {
+  const router = useRouter();
   const [schedules, setSchedules] = useState<PostingSchedule[]>([]);
   const [accounts, setAccounts] = useState<IgAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -81,10 +70,8 @@ export default function SchedulesPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingSchedule, setEditingSchedule] = useState<PostingSchedule | null>(null);
 
-  const fetchSchedules = async () => {
+  const fetchSchedules = useCallback(async () => {
     try {
       setIsLoading(true);
       const response = await schedulesApi.getAll({
@@ -99,7 +86,7 @@ export default function SchedulesPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filters, page]);
 
   const fetchAccounts = async () => {
     try {
@@ -112,34 +99,13 @@ export default function SchedulesPage() {
 
   useEffect(() => {
     fetchSchedules();
-  }, [filters, page]);
+  }, [filters, page, fetchSchedules]);
 
   useEffect(() => {
     fetchAccounts();
   }, []);
 
-  const handleCreateSchedule = async (data: any) => {
-    try {
-      await schedulesApi.create(data);
-      setIsFormOpen(false);
-      fetchSchedules();
-    } catch (error) {
-      console.error('Failed to create schedule:', error);
-      throw error;
-    }
-  };
 
-  const handleUpdateSchedule = async (data: any) => {
-    try {
-      await schedulesApi.update(editingSchedule!.id, data);
-      setIsFormOpen(false);
-      setEditingSchedule(null);
-      fetchSchedules();
-    } catch (error) {
-      console.error('Failed to update schedule:', error);
-      throw error;
-    }
-  };
 
   const handleDeleteSchedule = async (id: number) => {
     if (!confirm('Are you sure you want to delete this schedule?')) return;
@@ -165,14 +131,10 @@ export default function SchedulesPage() {
   };
 
   const handleEditClick = (schedule: PostingSchedule) => {
-    setEditingSchedule(schedule);
-    setIsFormOpen(true);
+    router.push(`/dashboard/schedules/edit/${schedule.id}`);
   };
 
-  const handleFormClose = () => {
-    setIsFormOpen(false);
-    setEditingSchedule(null);
-  };
+
 
   const handleFilterChange = (key: keyof ScheduleFilters, value: any) => {
     setFilters(prev => ({
@@ -239,7 +201,7 @@ export default function SchedulesPage() {
           <p className="text-black-muted mt-1">Manage automated posting schedules for your Instagram accounts</p>
         </div>
         <Button 
-          onClick={() => setIsFormOpen(true)} 
+          onClick={() => router.push('/dashboard/schedules/create')} 
           className="bg-[#ef5a29] text-white hover:bg-[#d4491f] px-4 py-2 rounded-md flex items-center gap-2 font-medium"
         >
           <Plus className="h-4 w-4" />
@@ -334,7 +296,7 @@ export default function SchedulesPage() {
           <h3 className="text-lg font-semibold text-black-medium mb-2">No Schedules Found</h3>
           <p className="text-black-muted mb-4">Create your first posting schedule to get started with automated content posting.</p>
           <Button 
-            onClick={() => setIsFormOpen(true)} 
+            onClick={() => router.push('/dashboard/schedules/create')} 
             className="bg-[#ef5a29] text-white hover:bg-[#d4491f] px-4 py-2 rounded-md font-medium"
           >
             Create Schedule
@@ -473,28 +435,6 @@ export default function SchedulesPage() {
         </div>
       )}
 
-      {/* Schedule Form Modal */}
-      <ScheduleForm
-        isOpen={isFormOpen}
-        onClose={handleFormClose}
-        onSubmit={editingSchedule ? handleUpdateSchedule : handleCreateSchedule}
-        initialData={editingSchedule ? {
-          id: editingSchedule.id,
-          accountId: editingSchedule.accountId,
-          name: editingSchedule.name,
-          description: editingSchedule.description,
-          frequency: editingSchedule.frequency,
-          status: editingSchedule.status,
-          isEnabled: editingSchedule.isEnabled,
-          startDate: editingSchedule.startDate,
-          endDate: editingSchedule.endDate,
-          customDays: editingSchedule.customDays,
-          timezone: editingSchedule.timezone,
-          timeSlots: editingSchedule.timeSlots,
-        } : undefined}
-        isEdit={!!editingSchedule}
-        accounts={accounts}
-      />
     </div>
   );
 }
