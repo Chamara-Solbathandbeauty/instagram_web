@@ -96,6 +96,8 @@ export default function ContentForm({
 
   // Check if content is published (read-only)
   const isPublished = initialData?.status === 'published';
+  console.log('🔍 ContentForm: initialData:', initialData);
+  console.log('🔍 ContentForm: isPublished:', isPublished);
 
   // Load published media details
   const loadPublishedMedia = useCallback(async () => {
@@ -223,8 +225,12 @@ export default function ContentForm({
 
   // Load published media details when component mounts
   useEffect(() => {
+    console.log('🔍 ContentForm useEffect: isPublished:', isPublished, 'initialData?.id:', initialData?.id);
     if (isPublished && initialData?.id) {
+      console.log('🔍 ContentForm useEffect: Calling loadPublishedMedia');
       loadPublishedMedia();
+    } else {
+      console.log('🔍 ContentForm useEffect: Not calling loadPublishedMedia - conditions not met');
     }
   }, [isPublished, initialData?.id, loadPublishedMedia]);
 

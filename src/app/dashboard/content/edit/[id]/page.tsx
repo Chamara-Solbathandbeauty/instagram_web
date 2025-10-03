@@ -70,6 +70,8 @@ export default function EditContentPage() {
 
   // Check if content is published (read-only)
   const isPublished = content?.status === 'published';
+  console.log('🔍 Edit Page: content:', content);
+  console.log('🔍 Edit Page: isPublished:', isPublished);
 
   const {
     register,
@@ -135,8 +137,12 @@ export default function EditContentPage() {
         await loadMediaFiles();
         
         // Load published media details if content is published
+        console.log('🔍 Edit Page loadContent: content status:', contentResponse.data.status);
         if (contentResponse.data.status === 'published') {
+          console.log('🔍 Edit Page loadContent: Content is published, calling loadPublishedMedia');
           await loadPublishedMedia();
+        } else {
+          console.log('🔍 Edit Page loadContent: Content is not published, skipping loadPublishedMedia');
         }
       } catch (error) {
         console.error('Failed to load content:', error);

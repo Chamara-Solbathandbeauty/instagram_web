@@ -15,13 +15,18 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  console.log('🌐 API Request:', config.method?.toUpperCase(), config.url, config.data);
   return config;
 });
 
 // Response interceptor to handle token refresh or logout on 401
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('🌐 API Response:', response.status, response.config.url, response.data);
+    return response;
+  },
   (error) => {
+    console.log('🌐 API Error:', error.response?.status, error.config?.url, error.response?.data);
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token');
       localStorage.removeItem('user');
@@ -125,7 +130,9 @@ export const contentApi = {
   regenerateMedia: (mediaId: number, prompt: string) => api.post(`/content/media/${mediaId}/regenerate`, { prompt }),
   getPublishedMedia: (contentId: number) => {
     console.log('🌐 API: Getting published media for content:', contentId);
-    return api.get(`/content/${contentId}/published-media`);
+    const url = `/content/${contentId}/published-media`;
+    console.log('🌐 API: Full URL:', url);
+    return api.get(url);
   },
 };
 
