@@ -160,7 +160,6 @@ export default function ContentPage() {
         accountId: content.accountId,
       });
       
-      // Update content status to published
       await fetchContent();
       alert('Content posted to Instagram successfully!');
     } catch (error: any) {
@@ -356,9 +355,9 @@ export default function ContentPage() {
                   <div className="flex items-center space-x-1">
                     <button
                       onClick={() => handlePostToInstagram(item)}
-                      disabled={postingId === item.id || item.status === 'published'}
+                      disabled={postingId === item.id}
                       className="p-1 text-black-muted hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50"
-                      title={item.status === 'published' ? 'Already published' : 'Post to Instagram'}
+                      title="Post to Instagram"
                     >
                       {postingId === item.id ? (
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>

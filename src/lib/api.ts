@@ -123,6 +123,7 @@ export const contentApi = {
   getMedia: (contentId: number) => api.get(`/content/${contentId}/media`),
   deleteMedia: (mediaId: number) => api.delete(`/content/media/${mediaId}`),
   regenerateMedia: (mediaId: number, prompt: string) => api.post(`/content/media/${mediaId}/regenerate`, { prompt }),
+  getPublishedMedia: (contentId: number) => api.get(`/content/${contentId}/published-media`),
 };
 
 // Schedules API functions

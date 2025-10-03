@@ -65,6 +65,11 @@ export default function EditContentPage() {
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<number | null>(null);
   const [isLoadingTimeSlots, setIsLoadingTimeSlots] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
+  const [publishedMedia, setPublishedMedia] = useState<any[]>([]);
+  const [isLoadingPublishedMedia, setIsLoadingPublishedMedia] = useState(false);
+
+  // Check if content is published (read-only)
+  const isPublished = content?.status === 'published';
 
   const {
     register,
@@ -88,6 +93,21 @@ export default function EditContentPage() {
     }
   }, [contentId]);
 
+  // Load published media details
+  const loadPublishedMedia = useCallback(async () => {
+    if (!isPublished) return;
+    
+    try {
+      setIsLoadingPublishedMedia(true);
+      const response = await contentApi.getPublishedMedia(contentId);
+      setPublishedMedia(response.data);
+    } catch (error) {
+      console.error('Failed to load published media details:', error);
+    } finally {
+      setIsLoadingPublishedMedia(false);
+    }
+  }, [contentId, isPublished]);
+
   // Load content data
   useEffect(() => {
     const loadContent = async () => {
@@ -110,6 +130,11 @@ export default function EditContentPage() {
         
         // Load media files
         await loadMediaFiles();
+        
+        // Load published media details if content is published
+        if (contentResponse.data.status === 'published') {
+          await loadPublishedMedia();
+        }
       } catch (error) {
         console.error('Failed to load content:', error);
       } finally {
@@ -329,17 +354,147 @@ export default function EditContentPage() {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
             </Button>
-            <h1 className="text-2xl font-bold text-gray-900">Edit Content</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {isPublished ? 'View Content' : 'Edit Content'}
+            </h1>
+            {isPublished && (
+              <span className="px-3 py-1 bg-green-100 text-green-800 text-sm font-medium rounded-full">
+                Published
+              </span>
+            )}
           </div>
-          <Button
-            variant="outline"
-            onClick={handleDeleteContent}
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
+          {!isPublished && (
+            <Button
+              variant="outline"
+              onClick={handleDeleteContent}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
+          )}
         </div>
+
+        {/* Published Content Notice */}
+        {isPublished && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-green-800">
+                  This content has been published
+                </h3>
+                <div className="mt-2 text-sm text-green-700">
+                  <p>This content is read-only because it has been published to Instagram. You can view the details but cannot make changes.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Published Media Details */}
+        {isPublished && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+            <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+              <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+              </svg>
+              Published Media Details
+            </h3>
+            
+            {isLoadingPublishedMedia ? (
+              <div className="flex items-center justify-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                <span className="ml-2 text-blue-700">Loading published details...</span>
+              </div>
+            ) : publishedMedia.length > 0 ? (
+              <div className="space-y-4">
+                {publishedMedia.map((media, index) => (
+                  <div key={media.id || index} className="bg-white rounded-lg p-4 border border-blue-100">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-2">Instagram Details</h4>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-600">Media ID:</span>
+                            <span className="text-sm font-mono text-blue-800 bg-blue-100 px-2 py-1 rounded">
+                              {media.instagramMediaId}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-600">Published:</span>
+                            <span className="text-sm text-blue-800">
+                              {new Date(media.publishedAt).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-600">Status:</span>
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              media.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {media.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-2">Links</h4>
+                        <div className="space-y-2">
+                          {media.instagramUrl && (
+                            <div>
+                              <span className="text-sm font-medium text-gray-600 block mb-1">Media URL:</span>
+                              <a 
+                                href={media.instagramUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-sm text-blue-600 hover:text-blue-800 underline break-all"
+                              >
+                                {media.instagramUrl}
+                              </a>
+                            </div>
+                          )}
+                          {media.instagramPermalink && (
+                            <div>
+                              <span className="text-sm font-medium text-gray-600 block mb-1">Permalink:</span>
+                              <a 
+                                href={media.instagramPermalink} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-sm text-blue-600 hover:text-blue-800 underline break-all"
+                              >
+                                {media.instagramPermalink}
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {media.metadata && (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <h4 className="font-medium text-gray-900 mb-2">Additional Details</h4>
+                        <div className="text-sm text-gray-600">
+                          <pre className="whitespace-pre-wrap bg-gray-50 p-2 rounded">
+                            {JSON.stringify(media.metadata, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-gray-500">No published media details found.</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Schedule Information */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
@@ -388,7 +543,6 @@ export default function EditContentPage() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-gray-600">Status:</span>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        scheduleContent.status === 'published' ? 'bg-green-100 text-green-800' :
                         scheduleContent.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
                         scheduleContent.status === 'queued' ? 'bg-yellow-100 text-yellow-800' :
                         scheduleContent.status === 'failed' ? 'bg-red-100 text-red-800' :
@@ -410,19 +564,20 @@ export default function EditContentPage() {
           )}
           
           {/* Schedule Assignment Section */}
-          <div className="mt-4 pt-4 border-t border-blue-200">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-md font-semibold text-blue-900">
-                Assign to Schedule
-              </h4>
-              <Button
-                type="button"
-                onClick={() => setShowScheduleAssignment(!showScheduleAssignment)}
-                className="bg-blue-600 text-white hover:bg-blue-700 px-3 py-2 rounded-md text-sm font-medium"
-              >
-                {showScheduleAssignment ? 'Hide Assignment' : 'Assign to Schedule'}
-              </Button>
-            </div>
+          {!isPublished && (
+            <div className="mt-4 pt-4 border-t border-blue-200">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-md font-semibold text-blue-900">
+                  Assign to Schedule
+                </h4>
+                <Button
+                  type="button"
+                  onClick={() => setShowScheduleAssignment(!showScheduleAssignment)}
+                  className="bg-blue-600 text-white hover:bg-blue-700 px-3 py-2 rounded-md text-sm font-medium"
+                >
+                  {showScheduleAssignment ? 'Hide Assignment' : 'Assign to Schedule'}
+                </Button>
+              </div>
 
             {showScheduleAssignment && (
               <div className="space-y-4">
@@ -524,7 +679,8 @@ export default function EditContentPage() {
                 )}
               </div>
             )}
-          </div>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -542,7 +698,8 @@ export default function EditContentPage() {
                     <select
                       id="accountId"
                       {...register('accountId', { valueAsNumber: true })}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
+                      disabled={isPublished}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29] disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value={0}>Select an account</option>
                       {accounts.map((account) => (
@@ -563,7 +720,8 @@ export default function EditContentPage() {
                     <select
                       id="type"
                       {...register('type')}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
+                      disabled={isPublished}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29] disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="post_with_image">Post with Image</option>
                       <option value="reel">Reel</option>
@@ -578,7 +736,8 @@ export default function EditContentPage() {
                     <select
                       id="status"
                       {...register('status')}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
+                      disabled={isPublished}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29] disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="generated">Generated</option>
                       <option value="queued">Queued</option>
@@ -595,6 +754,7 @@ export default function EditContentPage() {
                       id="generatedSource"
                       {...register('generatedSource')}
                       placeholder="AI Agent"
+                      disabled={isPublished}
                     />
                     {errors.generatedSource && (
                       <p className="text-red-500 text-sm mt-1">{errors.generatedSource.message}</p>
@@ -610,7 +770,8 @@ export default function EditContentPage() {
                     id="caption"
                     {...register('caption')}
                     rows={4}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
+                    disabled={isPublished}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29] disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter your caption..."
                   />
                   {errors.caption && (
@@ -626,6 +787,7 @@ export default function EditContentPage() {
                     id="hashTags"
                     {...register('hashTags')}
                     placeholder="#hashtag1 #hashtag2"
+                    disabled={isPublished}
                   />
                 </div>
 
@@ -638,6 +800,7 @@ export default function EditContentPage() {
                       id="usedTopics"
                       {...register('usedTopics')}
                       placeholder="Topics used for generation"
+                      disabled={isPublished}
                     />
                   </div>
 
@@ -649,20 +812,23 @@ export default function EditContentPage() {
                       id="tone"
                       {...register('tone')}
                       placeholder="Professional, Casual, etc."
+                      disabled={isPublished}
                     />
                   </div>
                 </div>
 
-                <div className="mt-6 flex justify-end">
-                  <Button
-                    type="submit"
-                    disabled={isSaving}
-                    className="bg-[#ef5a29] text-white hover:bg-[#d4491f]"
-                  >
-                    <Save className="h-4 w-4 mr-2" />
-                    {isSaving ? 'Saving...' : 'Save Changes'}
-                  </Button>
-                </div>
+                {!isPublished && (
+                  <div className="mt-6 flex justify-end">
+                    <Button
+                      type="submit"
+                      disabled={isSaving}
+                      className="bg-[#ef5a29] text-white hover:bg-[#d4491f]"
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      {isSaving ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                  </div>
+                )}
               </div>
             </form>
           </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -91,6 +91,26 @@ export default function ContentForm({
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<number | null>(null);
   const [isLoadingTimeSlots, setIsLoadingTimeSlots] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
+  const [publishedMedia, setPublishedMedia] = useState<any[]>([]);
+  const [isLoadingPublishedMedia, setIsLoadingPublishedMedia] = useState(false);
+
+  // Check if content is published (read-only)
+  const isPublished = initialData?.status === 'published';
+
+  // Load published media details
+  const loadPublishedMedia = useCallback(async () => {
+    if (!isPublished || !initialData?.id) return;
+    
+    try {
+      setIsLoadingPublishedMedia(true);
+      const response = await contentApi.getPublishedMedia(initialData.id);
+      setPublishedMedia(response.data);
+    } catch (error) {
+      console.error('Failed to load published media details:', error);
+    } finally {
+      setIsLoadingPublishedMedia(false);
+    }
+  }, [isPublished, initialData?.id]);
 
   const {
     register,
@@ -197,6 +217,13 @@ export default function ContentForm({
       fetchAvailableTimeSlots();
     }
   }, [selectedSchedule, selectedDate]);
+
+  // Load published media details when component mounts
+  useEffect(() => {
+    if (isPublished && initialData?.id) {
+      loadPublishedMedia();
+    }
+  }, [isPublished, initialData?.id, loadPublishedMedia]);
 
   const handleFormSubmit = async (data: ContentFormData) => {
     setIsSubmitting(true);
@@ -352,6 +379,103 @@ export default function ContentForm({
               </button>
             </div>
 
+            {/* Published Content Notice */}
+            {isPublished && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-green-800">
+                      This content has been published
+                    </h3>
+                    <div className="mt-2 text-sm text-green-700">
+                      <p>This content is read-only because it has been published to Instagram. You can view the details but cannot make changes.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Published Media Details */}
+            {isPublished && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <h3 className="text-md font-semibold text-blue-900 mb-3 flex items-center">
+                  <svg className="h-4 w-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                  </svg>
+                  Published Media Details
+                </h3>
+                
+                {isLoadingPublishedMedia ? (
+                  <div className="flex items-center justify-center py-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                    <span className="ml-2 text-blue-700 text-sm">Loading...</span>
+                  </div>
+                ) : publishedMedia.length > 0 ? (
+                  <div className="space-y-3">
+                    {publishedMedia.map((media, index) => (
+                      <div key={media.id || index} className="bg-white rounded p-3 border border-blue-100">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <div className="text-xs font-medium text-gray-600 mb-1">Instagram Media ID:</div>
+                            <div className="text-xs font-mono text-blue-800 bg-blue-100 px-2 py-1 rounded">
+                              {media.instagramMediaId}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-gray-600 mb-1">Published:</div>
+                            <div className="text-xs text-blue-800">
+                              {new Date(media.publishedAt).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {(media.instagramUrl || media.instagramPermalink) && (
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <div className="text-xs font-medium text-gray-600 mb-1">Links:</div>
+                            <div className="space-y-1">
+                              {media.instagramUrl && (
+                                <div>
+                                  <a 
+                                    href={media.instagramUrl} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:text-blue-800 underline break-all"
+                                  >
+                                    Media URL
+                                  </a>
+                                </div>
+                              )}
+                              {media.instagramPermalink && (
+                                <div>
+                                  <a 
+                                    href={media.instagramPermalink} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:text-blue-800 underline break-all"
+                                  >
+                                    View on Instagram
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-2">
+                    <p className="text-gray-500 text-sm">No published media details found.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -361,7 +485,8 @@ export default function ContentForm({
                   <select
                     id="accountId"
                     {...register('accountId', { valueAsNumber: true })}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
+                    disabled={isPublished}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29] disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
                     <option value={0}>Select an account</option>
                     {accounts.map((account) => (
@@ -382,7 +507,8 @@ export default function ContentForm({
                   <select
                     id="type"
                     {...register('type')}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
+                    disabled={isPublished}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29] disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
                     <option value="post_with_image">Post with Image</option>
                     <option value="reel">Reel</option>
@@ -402,6 +528,7 @@ export default function ContentForm({
                   defaultValue="Manual Creation"
                   {...register('generatedSource')}
                   error={errors.generatedSource?.message}
+                  disabled={isPublished}
                 />
                 {errors.generatedSource && (
                   <p className="mt-1 text-sm text-red-500">{errors.generatedSource.message}</p>
@@ -417,7 +544,8 @@ export default function ContentForm({
                   rows={4}
                   placeholder="Write your Instagram caption here..."
                   {...register('caption')}
-                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ef5a29] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                  disabled={isPublished}
+                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ef5a29] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-100 resize-none"
                 />
                 {errors.caption && (
                   <p className="mt-1 text-sm text-red-500">{errors.caption.message}</p>
@@ -434,6 +562,7 @@ export default function ContentForm({
                   placeholder="fashion, style, ootd (comma separated)"
                   {...register('hashTags')}
                   error={errors.hashTags?.message}
+                  disabled={isPublished}
                 />
                 <p className="mt-1 text-xs text-black-muted">Separate hashtags with commas</p>
               </div>
@@ -449,6 +578,7 @@ export default function ContentForm({
                     placeholder="Topics used for content generation"
                     {...register('usedTopics')}
                     error={errors.usedTopics?.message}
+                    disabled={isPublished}
                   />
                 </div>
 
@@ -462,6 +592,7 @@ export default function ContentForm({
                     placeholder="e.g., casual, professional, funny"
                     {...register('tone')}
                     error={errors.tone?.message}
+                    disabled={isPublished}
                   />
                 </div>
               </div>
@@ -473,7 +604,8 @@ export default function ContentForm({
                 <select
                   id="status"
                   {...register('status')}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
+                  disabled={initialData?.status === 'published'}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29] disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
                   <option value="generated">Generated</option>
                   <option value="queued">Queued</option>
@@ -581,17 +713,20 @@ export default function ContentForm({
                 >
                   Cancel
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="bg-[#ef5a29] text-white hover:bg-[#d4491f] px-4 py-2 rounded-md font-medium disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Saving...' : (isEdit ? 'Update Content' : 'Create Content')}
-                </Button>
+                {!isPublished && (
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="bg-[#ef5a29] text-white hover:bg-[#d4491f] px-4 py-2 rounded-md font-medium disabled:opacity-50"
+                  >
+                    {isSubmitting ? 'Saving...' : (isEdit ? 'Update Content' : 'Create Content')}
+                  </Button>
+                )}
               </div>
 
               {/* Schedule Assignment Section - Available for all content */}
-              <div className="border-t border-gray-200 pt-6 mt-6">
+              {!isPublished && (
+                <div className="border-t border-gray-200 pt-6 mt-6">
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <h4 className="text-lg font-medium text-black-medium">
@@ -713,6 +848,7 @@ export default function ContentForm({
                     </div>
                   )}
                 </div>
+              )}
             </form>
           </div>
         </div>
