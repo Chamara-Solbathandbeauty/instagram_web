@@ -101,7 +101,7 @@ export default function ContentForm({
 
   // Load published media details
   const loadPublishedMedia = useCallback(async () => {
-    if (!isPublished || !initialData?.id) return;
+    if (!initialData?.id) return;
     
     try {
       console.log('🔍 Loading published media for content:', initialData.id);
@@ -115,7 +115,7 @@ export default function ContentForm({
     } finally {
       setIsLoadingPublishedMedia(false);
     }
-  }, [isPublished, initialData?.id]);
+  }, [initialData?.id]);
 
   const {
     register,

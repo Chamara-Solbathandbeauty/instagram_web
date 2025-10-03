@@ -97,8 +97,6 @@ export default function EditContentPage() {
 
   // Load published media details
   const loadPublishedMedia = useCallback(async () => {
-    if (!isPublished) return;
-    
     try {
       console.log('🔍 Loading published media for content:', contentId);
       setIsLoadingPublishedMedia(true);
@@ -111,7 +109,7 @@ export default function EditContentPage() {
     } finally {
       setIsLoadingPublishedMedia(false);
     }
-  }, [contentId, isPublished]);
+  }, [contentId]);
 
   // Load content data
   useEffect(() => {
