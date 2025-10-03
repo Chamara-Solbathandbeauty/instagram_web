@@ -102,11 +102,14 @@ export default function ContentForm({
     if (!isPublished || !initialData?.id) return;
     
     try {
+      console.log('🔍 Loading published media for content:', initialData.id);
       setIsLoadingPublishedMedia(true);
       const response = await contentApi.getPublishedMedia(initialData.id);
+      console.log('📊 Published media response:', response.data);
       setPublishedMedia(response.data);
-    } catch (error) {
-      console.error('Failed to load published media details:', error);
+    } catch (error: any) {
+      console.error('❌ Failed to load published media details:', error);
+      console.error('Error details:', error.response?.data);
     } finally {
       setIsLoadingPublishedMedia(false);
     }

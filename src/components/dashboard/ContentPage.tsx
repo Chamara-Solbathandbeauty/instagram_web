@@ -154,16 +154,19 @@ export default function ContentPage() {
     if (!confirm(`Post "${content.caption?.substring(0, 50)}..." to Instagram?`)) return;
     
     try {
+      console.log('🚀 ContentPage: Starting Instagram post for content:', content.id, 'account:', content.accountId);
       setPostingId(content.id);
-      await instagramApi.postContent({
+      const result = await instagramApi.postContent({
         contentId: content.id,
         accountId: content.accountId,
       });
+      console.log('✅ ContentPage: Instagram post successful:', result.data);
       
       await fetchContent();
       alert('Content posted to Instagram successfully!');
     } catch (error: any) {
-      console.error('Failed to post to Instagram:', error);
+      console.error('❌ ContentPage: Failed to post to Instagram:', error);
+      console.error('Error details:', error.response?.data);
       const errorMessage = error.response?.data?.message || 'Failed to post to Instagram';
       alert(errorMessage);
     } finally {

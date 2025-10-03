@@ -123,7 +123,10 @@ export const contentApi = {
   getMedia: (contentId: number) => api.get(`/content/${contentId}/media`),
   deleteMedia: (mediaId: number) => api.delete(`/content/media/${mediaId}`),
   regenerateMedia: (mediaId: number, prompt: string) => api.post(`/content/media/${mediaId}/regenerate`, { prompt }),
-  getPublishedMedia: (contentId: number) => api.get(`/content/${contentId}/published-media`),
+  getPublishedMedia: (contentId: number) => {
+    console.log('🌐 API: Getting published media for content:', contentId);
+    return api.get(`/content/${contentId}/published-media`);
+  },
 };
 
 // Schedules API functions
@@ -232,7 +235,10 @@ export const instagramApi = {
   getStatus: (accountId: number) => api.get(`/auth/instagram/status/${accountId}`),
   testConnection: (accountId: number) => api.post(`/auth/instagram/test/${accountId}`),
   disconnect: (accountId: number) => api.post(`/auth/instagram/disconnect/${accountId}`),
-  postContent: (data: { contentId: number; accountId: number }) => api.post('/auth/instagram/post', data),
+  postContent: (data: { contentId: number; accountId: number }) => {
+    console.log('📤 Instagram API: Posting content:', data);
+    return api.post('/auth/instagram/post', data);
+  },
 };
 
 export default api;
