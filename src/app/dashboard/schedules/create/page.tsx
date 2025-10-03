@@ -158,8 +158,6 @@ export default function CreateSchedulePage() {
       alert('Please select an Instagram account first');
       return;
     }
-    console.log('Account selected:', selectedAccountId);
-    console.log('Opening modal...');
     setShowScheduleGenerationModal(true);
   };
 
