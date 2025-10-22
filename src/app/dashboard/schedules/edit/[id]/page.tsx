@@ -18,6 +18,11 @@ const timeSlotSchema = z.object({
   postType: z.enum(['post_with_image', 'reel', 'story']),
   isEnabled: z.boolean().default(true),
   label: z.string().optional(),
+  tone: z.string().optional(),
+  dimensions: z.string().optional(),
+  preferredVoiceAccent: z.string().optional(),
+  reelDuration: z.number().optional(),
+  storyType: z.string().optional(),
 });
 
 const scheduleSchema = z.object({
@@ -76,6 +81,7 @@ export default function EditSchedulePage() {
     handleSubmit,
     formState: { errors },
     reset,
+    watch,
     control,
   } = useForm({
     resolver: zodResolver(scheduleSchema),
@@ -98,6 +104,10 @@ export default function EditSchedulePage() {
           postType: 'post_with_image' as const,
           isEnabled: true,
           label: 'Business Hours',
+          tone: '',
+          dimensions: '',
+          preferredVoiceAccent: '',
+          reelDuration: undefined,
         }
       ],
     },
@@ -125,7 +135,18 @@ export default function EditSchedulePage() {
         endDate: schedule.endDate || '',
         customDays: schedule.customDays || [],
         timezone: schedule.timezone,
-        timeSlots: schedule.timeSlots || [
+        timeSlots: schedule.timeSlots?.map((slot: any) => ({
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          dayOfWeek: slot.dayOfWeek,
+          postType: slot.postType,
+          isEnabled: slot.isEnabled,
+          label: slot.label || '',
+          tone: slot.tone || '',
+          dimensions: slot.dimensions || '',
+          preferredVoiceAccent: slot.preferredVoiceAccent || '',
+          reelDuration: slot.reelDuration || undefined,
+        })) || [
           {
             startTime: '09:00',
             endTime: '17:00',
@@ -133,6 +154,10 @@ export default function EditSchedulePage() {
             postType: 'post_with_image' as const,
             isEnabled: true,
             label: 'Business Hours',
+            tone: '',
+            dimensions: '',
+            preferredVoiceAccent: '',
+            reelDuration: undefined,
           }
         ],
       });
@@ -176,6 +201,8 @@ export default function EditSchedulePage() {
       router.push('/dashboard/schedules');
     } catch (error) {
       console.error('Error updating schedule:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to update schedule: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -189,6 +216,10 @@ export default function EditSchedulePage() {
       postType: 'post_with_image' as const,
       isEnabled: true,
       label: '',
+      tone: '',
+      dimensions: '',
+      preferredVoiceAccent: '',
+      reelDuration: undefined,
     });
   };
 
@@ -520,17 +551,104 @@ export default function EditSchedulePage() {
                         </div>
                       </div>
 
-                      <div className="mt-3">
-                        <label className="block text-xs font-medium text-black-medium mb-1">
-                          Label (Optional)
-                        </label>
-                        <Input
-                          type="text"
-                          placeholder="e.g., Morning Posts, Evening Stories"
-                          {...register(`timeSlots.${index}.label`)}
-                          className="text-sm"
-                        />
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-black-medium mb-1">
+                            Label (Optional)
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="e.g., Morning Posts, Evening Stories"
+                            {...register(`timeSlots.${index}.label`)}
+                            className="text-sm"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-black-medium mb-1">
+                            Tone
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="e.g., professional, casual, friendly"
+                            {...register(`timeSlots.${index}.tone`)}
+                            className="text-sm"
+                          />
+                        </div>
                       </div>
+
+                      {/* Story Type - only show for story post type */}
+                      {watch(`timeSlots.${index}.postType`) === 'story' && (
+                        <div className="mt-3">
+                          <label className="block text-xs font-medium text-black-medium mb-1">
+                            Story Type
+                          </label>
+                          <select
+                            {...register(`timeSlots.${index}.storyType`)}
+                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F]"
+                          >
+                            <option value="video">Video Story</option>
+                            <option value="image">Image Story</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Dimensions - only show for reel post type */}
+                      {watch(`timeSlots.${index}.postType`) === 'reel' && (
+                        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-black-medium mb-1">
+                              Dimensions
+                            </label>
+                            <select
+                              {...register(`timeSlots.${index}.dimensions`)}
+                              className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F]"
+                            >
+                              <option value="">Select dimensions...</option>
+                              <option value="16:9">16:9 (Landscape)</option>
+                              <option value="9:16">9:16 (Portrait)</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-black-medium mb-1">
+                            Voice Accent
+                          </label>
+                          <select
+                            {...register(`timeSlots.${index}.preferredVoiceAccent`)}
+                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F]"
+                          >
+                            <option value="">Select accent...</option>
+                            <option value="american">American</option>
+                            <option value="british">British</option>
+                            <option value="australian">Australian</option>
+                            <option value="neutral">Neutral</option>
+                            <option value="canadian">Canadian</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Reel Duration - only show for reel post type */}
+                      {watch(`timeSlots.${index}.postType`) === 'reel' && (
+                        <div className="mt-3">
+                          <label className="block text-xs font-medium text-black-medium mb-1">
+                            Reel Duration
+                          </label>
+                          <select
+                            {...register(`timeSlots.${index}.reelDuration`, { valueAsNumber: true })}
+                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F]"
+                          >
+                            <option value="">Select duration...</option>
+                            <option value={8}>8 seconds</option>
+                            <option value={16}>16 seconds</option>
+                            <option value={24}>24 seconds</option>
+                            <option value={32}>32 seconds</option>
+                          </select>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

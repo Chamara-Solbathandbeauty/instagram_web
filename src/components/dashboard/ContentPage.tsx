@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Edit2, Trash2, FileText, Filter, Image, Video, Calendar, Instagram } from 'lucide-react';
+import { Plus, Edit2, Trash2, FileText, Filter, Image, Video, Calendar, Instagram, CheckSquare, Square } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { contentApi, igAccountsApi, instagramApi } from '@/lib/api';
@@ -18,7 +18,7 @@ interface Content {
   usedTopics?: string;
   tone?: string;
   type: 'reel' | 'story' | 'post_with_image';
-  status: 'generated' | 'published' | 'rejected' | 'queued';
+  status: 'pending' | 'approved' | 'rejected' | 'published';
   createdAt: string;
   updatedAt: string;
   account: {
@@ -41,7 +41,7 @@ interface IgAccount {
 interface ContentFilters {
   accountId?: number;
   type?: 'reel' | 'story' | 'post_with_image';
-  status?: 'generated' | 'published' | 'rejected' | 'queued';
+  status?: 'pending' | 'approved' | 'rejected' | 'published';
 }
 
 export default function ContentPage() {
@@ -58,6 +58,9 @@ export default function ContentPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMediaViewerOpen, setIsMediaViewerOpen] = useState(false);
   const [selectedContentForMedia, setSelectedContentForMedia] = useState<Content | null>(null);
+  const [selectedContentIds, setSelectedContentIds] = useState<number[]>([]);
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const fetchContent = useCallback(async () => {
     try {
@@ -187,6 +190,62 @@ export default function ContentPage() {
     setPage(1);
   };
 
+  const handleSelectContent = (contentId: number) => {
+    setSelectedContentIds(prev => 
+      prev.includes(contentId) 
+        ? prev.filter(id => id !== contentId)
+        : [...prev, contentId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedContentIds.length === content.length) {
+      setSelectedContentIds([]);
+    } else {
+      setSelectedContentIds(content.map(item => item.id));
+    }
+  };
+
+  const handleBulkStatusUpdate = async (newStatus: string) => {
+    if (selectedContentIds.length === 0) return;
+    
+    if (!confirm(`Are you sure you want to update ${selectedContentIds.length} content items to "${newStatus}" status?`)) return;
+    
+    try {
+      setIsBulkUpdating(true);
+      await contentApi.bulkUpdateStatus(selectedContentIds, newStatus);
+      setSelectedContentIds([]);
+      await fetchContent();
+      alert(`Successfully updated ${selectedContentIds.length} content items to "${newStatus}" status!`);
+    } catch (error: any) {
+      console.error('Failed to bulk update content status:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to update content status. Please try again.';
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setIsBulkUpdating(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedContentIds.length === 0) return;
+    
+    if (!confirm(`Are you sure you want to delete ${selectedContentIds.length} content items? This action cannot be undone.`)) return;
+    
+    try {
+      setIsBulkDeleting(true);
+      await contentApi.bulkDelete(selectedContentIds);
+      setSelectedContentIds([]);
+      await fetchContent();
+      alert(`Successfully deleted ${selectedContentIds.length} content items!`);
+    } catch (error: any) {
+      console.error('Failed to bulk delete content:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete content. Please try again.';
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   const getTypeIcon = (type: string) => {
     switch (type) {
       case 'reel':
@@ -198,14 +257,42 @@ export default function ContentPage() {
     }
   };
 
+  const getTypeInfo = (type: string) => {
+    switch (type) {
+      case 'reel':
+        return {
+          label: 'REEL',
+          color: 'bg-purple-100 text-purple-800 border-purple-200',
+          icon: <Video className="h-3 w-3" />,
+          bgColor: 'bg-purple-50'
+        };
+      case 'story':
+        return {
+          label: 'STORY',
+          color: 'bg-orange-100 text-orange-800 border-orange-200',
+          icon: <Calendar className="h-3 w-3" />,
+          bgColor: 'bg-orange-50'
+        };
+      default:
+        return {
+          label: 'POST',
+          color: 'bg-blue-100 text-blue-800 border-blue-200',
+          icon: <Image className="h-3 w-3" />,
+          bgColor: 'bg-blue-50'
+        };
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'published':
         return 'bg-green-100 text-green-800';
-      case 'queued':
+      case 'approved':
         return 'bg-blue-100 text-blue-800';
       case 'rejected':
         return 'bg-red-100 text-red-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -277,7 +364,7 @@ export default function ContentPage() {
             
             <div>
               <label className="block text-sm font-medium text-black-medium mb-1">
-                Type
+                Content Type
               </label>
               <select
                 value={filters.type || ''}
@@ -285,9 +372,9 @@ export default function ContentPage() {
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
               >
                 <option value="">All Types</option>
-                <option value="post_with_image">Post with Image</option>
-                <option value="reel">Reel</option>
-                <option value="story">Story</option>
+                <option value="post_with_image">📷 Post with Image</option>
+                <option value="reel">🎬 Reel</option>
+                <option value="story">📅 Story</option>
               </select>
             </div>
 
@@ -301,8 +388,8 @@ export default function ContentPage() {
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
               >
                 <option value="">All Statuses</option>
-                <option value="generated">Generated</option>
-                <option value="queued">Queued</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
                 <option value="published">Published</option>
                 <option value="rejected">Rejected</option>
               </select>
@@ -314,6 +401,59 @@ export default function ContentPage() {
                 className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-4 py-2 rounded-md font-medium"
               >
                 Clear Filters
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Bulk Actions Toolbar */}
+      {selectedContentIds.length > 0 && (
+        <Card className="p-4 bg-blue-50 border-blue-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <span className="text-sm font-medium text-blue-800">
+                {selectedContentIds.length} content item{selectedContentIds.length !== 1 ? 's' : ''} selected
+              </span>
+              <Button
+                onClick={() => setSelectedContentIds([])}
+                className="text-blue-600 hover:text-blue-800 text-sm"
+                variant="ghost"
+              >
+                Clear Selection
+              </Button>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-blue-700">Update status to:</span>
+              <Button
+                onClick={() => handleBulkStatusUpdate('approved')}
+                disabled={isBulkUpdating || isBulkDeleting}
+                className="bg-blue-600 text-white hover:bg-blue-700 px-3 py-1 text-sm"
+              >
+                {isBulkUpdating ? 'Updating...' : 'Approve'}
+              </Button>
+              <Button
+                onClick={() => handleBulkStatusUpdate('published')}
+                disabled={isBulkUpdating || isBulkDeleting}
+                className="bg-green-600 text-white hover:bg-green-700 px-3 py-1 text-sm"
+              >
+                {isBulkUpdating ? 'Updating...' : 'Publish'}
+              </Button>
+              <Button
+                onClick={() => handleBulkStatusUpdate('rejected')}
+                disabled={isBulkUpdating || isBulkDeleting}
+                className="bg-red-600 text-white hover:bg-red-700 px-3 py-1 text-sm"
+              >
+                {isBulkUpdating ? 'Updating...' : 'Reject'}
+              </Button>
+              <div className="border-l border-gray-300 h-6 mx-2"></div>
+              <Button
+                onClick={handleBulkDelete}
+                disabled={isBulkUpdating || isBulkDeleting}
+                className="bg-red-600 text-white hover:bg-red-700 px-3 py-1 text-sm flex items-center gap-1"
+              >
+                <Trash2 className="h-3 w-3" />
+                {isBulkDeleting ? 'Deleting...' : 'Delete'}
               </Button>
             </div>
           </div>
@@ -342,11 +482,93 @@ export default function ContentPage() {
         </Card>
       ) : (
         <>
+          {/* Select All Header */}
+          {content.length > 0 && (
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={handleSelectAll}
+                  className="flex items-center space-x-2 text-sm text-black-medium hover:text-[#ef5a29] transition-colors"
+                >
+                  {selectedContentIds.length === content.length ? (
+                    <CheckSquare className="h-5 w-5 text-[#ef5a29]" />
+                  ) : (
+                    <Square className="h-5 w-5" />
+                  )}
+                  <span>
+                    {selectedContentIds.length === content.length ? 'Deselect All' : 'Select All'}
+                  </span>
+                </button>
+                {selectedContentIds.length > 0 && (
+                  <span className="text-sm text-black-muted">
+                    ({selectedContentIds.length} selected)
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {(content || []).map((item) => (
-              <Card key={item.id} className="p-4 hover:shadow-lg transition-shadow">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center space-x-2">
+            {(content || []).map((item) => {
+              const typeInfo = getTypeInfo(item.type);
+              return (
+                <Card key={item.id} className={`p-4 hover:shadow-lg transition-shadow border-l-4 ${typeInfo.bgColor} ${selectedContentIds.includes(item.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''}`} style={{borderLeftColor: typeInfo.color.includes('purple') ? '#8b5cf6' : typeInfo.color.includes('orange') ? '#f97316' : '#3b82f6'}}>
+                  {/* Selection Checkbox */}
+                  <div className="flex items-center justify-between mb-3">
+                    <button
+                      onClick={() => handleSelectContent(item.id)}
+                      className="flex items-center space-x-2 text-sm text-black-medium hover:text-[#ef5a29] transition-colors"
+                    >
+                      {selectedContentIds.includes(item.id) ? (
+                        <CheckSquare className="h-4 w-4 text-[#ef5a29]" />
+                      ) : (
+                        <Square className="h-4 w-4" />
+                      )}
+                      <span className="text-xs">Select</span>
+                    </button>
+                  </div>
+
+                  {/* Content Type Badge - Prominent at top */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border ${typeInfo.color}`}>
+                      {typeInfo.icon}
+                      {typeInfo.label}
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <button
+                        onClick={() => handlePostToInstagram(item)}
+                        disabled={postingId === item.id}
+                        className="p-1 text-black-muted hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50"
+                        title="Post to Instagram"
+                      >
+                        {postingId === item.id ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                        ) : (
+                          <Instagram className="h-4 w-4" />
+                        )}
+                      </button>
+                      <button 
+                        onClick={() => handleEditClick(item)}
+                        className="p-1 text-black-muted hover:text-[#ef5a29] hover:bg-[#fef7f5] rounded-md transition-colors"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteContent(item.id)}
+                        disabled={deletingId === item.id}
+                        className="p-1 text-black-muted hover:text-red-500 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
+                      >
+                        {deletingId === item.id ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-500"></div>
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Account and Date Info */}
+                  <div className="flex items-center space-x-2 mb-3">
                     <div className="w-8 h-8 bg-[#fef7f5] rounded-full flex items-center justify-center">
                       {getTypeIcon(item.type)}
                     </div>
@@ -355,38 +577,6 @@ export default function ContentPage() {
                       <p className="text-xs text-black-muted">{formatDate(item.createdAt)}</p>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-1">
-                    <button
-                      onClick={() => handlePostToInstagram(item)}
-                      disabled={postingId === item.id}
-                      className="p-1 text-black-muted hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50"
-                      title="Post to Instagram"
-                    >
-                      {postingId === item.id ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                      ) : (
-                        <Instagram className="h-4 w-4" />
-                      )}
-                    </button>
-                    <button 
-                      onClick={() => handleEditClick(item)}
-                      className="p-1 text-black-muted hover:text-[#ef5a29] hover:bg-[#fef7f5] rounded-md transition-colors"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteContent(item.id)}
-                      disabled={deletingId === item.id}
-                      className="p-1 text-black-muted hover:text-red-500 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
-                    >
-                      {deletingId === item.id ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-500"></div>
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
 
                 {item.caption && (
                   <p className="text-sm text-black-muted mb-3 line-clamp-2">
@@ -418,17 +608,18 @@ export default function ContentPage() {
                       onClick={() => handleViewMedia(item)}
                       className="flex items-center space-x-1 px-2 py-1 rounded-md hover:bg-[#fef7f5] transition-colors"
                     >
-                      <div className="w-4 h-4 bg-[#fef7f5] rounded-full flex items-center justify-center">
-                        <Image className="h-2 w-2 text-[#ef5a29]" />
+                      <div className={`w-4 h-4 ${typeInfo.bgColor} rounded-full flex items-center justify-center`}>
+                        {typeInfo.icon}
                       </div>
                       <span className="text-xs font-medium text-[#ef5a29]">
-                        {item.media ? item.media.length : 0} files
+                        {item.media ? item.media.length : 0} {typeInfo.label.toLowerCase()} files
                       </span>
                     </button>
                   </div>
                 </div>
               </Card>
-            ))}
+              );
+            })}
           </div>
 
           {/* Pagination */}

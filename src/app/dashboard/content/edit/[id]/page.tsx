@@ -21,7 +21,7 @@ const contentSchema = z.object({
   usedTopics: z.string().optional(),
   tone: z.string().optional(),
   type: z.enum(['reel', 'story', 'post_with_image']),
-  status: z.enum(['generated', 'published', 'rejected', 'queued']),
+  status: z.enum(['pending', 'approved', 'rejected', 'published']),
 });
 
 type ContentFormData = z.infer<typeof contentSchema>;
@@ -746,8 +746,8 @@ export default function EditContentPage() {
                       disabled={isPublished}
                       className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29] disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
-                      <option value="generated">Generated</option>
-                      <option value="queued">Queued</option>
+                      <option value="pending">Pending</option>
+                      <option value="approved">Approved</option>
                       <option value="published">Published</option>
                       <option value="rejected">Rejected</option>
                     </select>

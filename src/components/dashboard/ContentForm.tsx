@@ -19,7 +19,7 @@ const contentSchema = z.object({
   usedTopics: z.string().optional(),
   tone: z.string().optional(),
   type: z.enum(['reel', 'story', 'post_with_image']).default('post_with_image'),
-  status: z.enum(['generated', 'published', 'rejected', 'queued']).default('generated'),
+  status: z.enum(['pending', 'approved', 'rejected', 'published']).default('pending'),
 });
 
 type ContentFormData = z.infer<typeof contentSchema>;
@@ -133,7 +133,7 @@ export default function ContentForm({
       usedTopics: '',
       tone: '',
       type: 'post_with_image' as const,
-      status: 'generated' as const,
+      status: 'pending' as const,
     },
   });
 
@@ -161,7 +161,7 @@ export default function ContentForm({
         usedTopics: initialData.usedTopics || '',
         tone: initialData.tone || '',
         type: initialData.type || 'post_with_image',
-        status: initialData.status || 'generated',
+        status: initialData.status || 'pending',
       });
       
       // Load media files if editing existing content
@@ -179,7 +179,7 @@ export default function ContentForm({
         usedTopics: '',
         tone: '',
         type: 'post_with_image',
-        status: 'generated',
+        status: 'pending',
       });
       setMediaFiles([]);
     }
@@ -616,8 +616,8 @@ export default function ContentForm({
                   disabled={initialData?.status === 'published'}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29] disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
-                  <option value="generated">Generated</option>
-                  <option value="queued">Queued</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
                   <option value="published">Published</option>
                   <option value="rejected">Rejected</option>
                 </select>

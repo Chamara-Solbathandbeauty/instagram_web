@@ -70,7 +70,7 @@ export const contentApi = {
   getAll: (filters?: {
     accountId?: number;
     type?: 'reel' | 'story' | 'post_with_image';
-    status?: 'generated' | 'published' | 'rejected' | 'queued';
+    status?: 'pending' | 'approved' | 'rejected' | 'published';
     page?: number;
     limit?: number;
   }) => {
@@ -93,7 +93,7 @@ export const contentApi = {
     usedTopics?: string;
     tone?: string;
     type?: 'reel' | 'story' | 'post_with_image';
-    status?: 'generated' | 'published' | 'rejected' | 'queued';
+    status?: 'pending' | 'approved' | 'rejected' | 'published';
   }) => api.post('/content', data),
   update: (id: number, data: {
     accountId?: number;
@@ -103,7 +103,7 @@ export const contentApi = {
     usedTopics?: string;
     tone?: string;
     type?: 'reel' | 'story' | 'post_with_image';
-    status?: 'generated' | 'published' | 'rejected' | 'queued';
+    status?: 'pending' | 'approved' | 'rejected' | 'published';
   }) => api.put(`/content/${id}`, data),
   delete: (id: number) => api.delete(`/content/${id}`),
   
@@ -134,6 +134,8 @@ export const contentApi = {
     console.log('🌐 API: Full URL:', url);
     return api.get(url);
   },
+  bulkUpdateStatus: (contentIds: number[], status: string) => api.post('/content/bulk-update-status', { contentIds, status }),
+  bulkDelete: (contentIds: number[]) => api.post('/content/bulk-delete', { contentIds }),
 };
 
 // Schedules API functions
