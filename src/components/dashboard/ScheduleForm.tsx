@@ -671,6 +671,26 @@ export default function ScheduleForm({
                         </div>
                       )}
 
+                      {/* Story Duration - only show for video story type */}
+                      {watch(`timeSlots.${index}.postType`) === 'story' && watch(`timeSlots.${index}.storyType`) === 'video' && (
+                        <div className="mt-3">
+                          <label className="block text-xs font-medium text-black-medium mb-1">
+                            Story Duration (seconds)
+                          </label>
+                          <select
+                            {...register(`timeSlots.${index}.reelDuration`, { valueAsNumber: true })}
+                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
+                          >
+                            <option value="">Select duration...</option>
+                            <option value={8}>8 seconds - Quick</option>
+                            <option value={15}>15 seconds - Standard</option>
+                            <option value={30}>30 seconds - Extended</option>
+                            <option value={45}>45 seconds - Long</option>
+                            <option value={60}>60 seconds - Extended Long</option>
+                          </select>
+                        </div>
+                      )}
+
                       <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                         {/* Dimensions - only show for reel post type */}
                         {watch(`timeSlots.${index}.postType`) === 'reel' && (
