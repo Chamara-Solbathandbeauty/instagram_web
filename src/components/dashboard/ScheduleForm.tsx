@@ -640,7 +640,7 @@ export default function ScheduleForm({
                           <select
                             {...register(`timeSlots.${index}.postType`)}
                             onChange={(e) => {
-                              const newPostType = e.target.value;
+                              const newPostType = e.target.value as 'post_with_image' | 'reel' | 'story';
                               setValue(`timeSlots.${index}.postType`, newPostType);
                               // Set default storyType to 'image' when postType changes to 'story'
                               if (newPostType === 'story') {
