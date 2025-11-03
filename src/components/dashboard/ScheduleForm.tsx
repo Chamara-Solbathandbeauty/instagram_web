@@ -20,7 +20,21 @@ const timeSlotSchema = z.object({
   dimensions: z.string().optional(),
   preferredVoiceAccent: z.string().optional(),
   reelDuration: z.number().optional(),
-  storyType: z.string().optional(),
+  storyType: z.string().optional().default('image'),
+  imageCount: z.number().min(1).max(5).optional().default(1),
+}).refine((data) => {
+  // Require reelDuration for reels
+  if (data.postType === 'reel' && !data.reelDuration) {
+    return false;
+  }
+  // Require reelDuration for video stories
+  if (data.postType === 'story' && data.storyType === 'video' && !data.reelDuration) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Duration is required for reels and video stories',
+  path: ['reelDuration'],
 });
 
 const scheduleSchema = z.object({
@@ -92,6 +106,7 @@ export default function ScheduleForm({
     reset,
     watch,
     control,
+    setValue,
   } = useForm({
     resolver: zodResolver(scheduleSchema),
     defaultValues: {
@@ -112,12 +127,13 @@ export default function ScheduleForm({
           dayOfWeek: 1,
           postType: 'post_with_image' as const,
           isEnabled: true,
-          label: 'Business Hours',
-          tone: '',
-          dimensions: '',
-          preferredVoiceAccent: '',
-          reelDuration: undefined,
-        }
+            label: 'Business Hours',
+            tone: '',
+            dimensions: '',
+            preferredVoiceAccent: '',
+            reelDuration: undefined,
+            imageCount: 1,
+          }
       ],
     },
   });
@@ -207,10 +223,11 @@ export default function ScheduleForm({
       isEnabled: true,
       label: '',
       tone: '',
-      dimensions: '',
-      preferredVoiceAccent: '',
-      reelDuration: undefined,
-      storyType: 'video', // Default to video for stories
+          dimensions: '',
+          preferredVoiceAccent: '',
+          reelDuration: undefined,
+          storyType: 'image', // Default to image for stories
+          imageCount: 1, // Default to 1 image
     });
   };
 
@@ -265,6 +282,8 @@ export default function ScheduleForm({
           dimensions?: string;
           preferredVoiceAccent?: string;
           reelDuration?: number;
+          storyType?: string;
+          imageCount?: number;
         }) => ({
           startTime: slot.startTime.substring(0, 5), // Convert HH:MM:SS to HH:MM
           endTime: slot.endTime.substring(0, 5),
@@ -276,6 +295,8 @@ export default function ScheduleForm({
           dimensions: slot.dimensions || '',
           preferredVoiceAccent: slot.preferredVoiceAccent || '',
           reelDuration: slot.reelDuration || undefined,
+          storyType: slot.storyType || (slot.postType === 'story' ? 'image' : undefined),
+          imageCount: slot.imageCount || (slot.postType === 'post_with_image' ? 1 : undefined),
         })),
       });
 
@@ -618,6 +639,24 @@ export default function ScheduleForm({
                           </label>
                           <select
                             {...register(`timeSlots.${index}.postType`)}
+                            onChange={(e) => {
+                              const newPostType = e.target.value;
+                              setValue(`timeSlots.${index}.postType`, newPostType);
+                              // Set default storyType to 'image' when postType changes to 'story'
+                              if (newPostType === 'story') {
+                                setValue(`timeSlots.${index}.storyType`, 'image');
+                              }
+                              // Clear reelDuration if switching away from reel/video story
+                              if (newPostType !== 'reel' && newPostType !== 'story') {
+                                setValue(`timeSlots.${index}.reelDuration`, undefined);
+                              } else if (newPostType === 'story') {
+                                // Clear reelDuration when switching to story (will be set when storyType is 'video')
+                                const currentStoryType = watch(`timeSlots.${index}.storyType`);
+                                if (currentStoryType !== 'video') {
+                                  setValue(`timeSlots.${index}.reelDuration`, undefined);
+                                }
+                              }
+                            }}
                             className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
                           >
                             {CONTENT_TYPES.map((type) => (
@@ -663,10 +702,18 @@ export default function ScheduleForm({
                           </label>
                           <select
                             {...register(`timeSlots.${index}.storyType`)}
+                            onChange={(e) => {
+                              const newStoryType = e.target.value;
+                              setValue(`timeSlots.${index}.storyType`, newStoryType);
+                              // Clear reelDuration when switching to image story
+                              if (newStoryType === 'image') {
+                                setValue(`timeSlots.${index}.reelDuration`, undefined);
+                              }
+                            }}
                             className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
                           >
-                            <option value="video">Video Story</option>
                             <option value="image">Image Story</option>
+                            <option value="video">Video Story</option>
                           </select>
                         </div>
                       )}
@@ -675,11 +722,12 @@ export default function ScheduleForm({
                       {watch(`timeSlots.${index}.postType`) === 'story' && watch(`timeSlots.${index}.storyType`) === 'video' && (
                         <div className="mt-3">
                           <label className="block text-xs font-medium text-black-medium mb-1">
-                            Story Duration (seconds)
+                            Story Duration (seconds) <span className="text-red-500">*</span>
                           </label>
                           <select
-                            {...register(`timeSlots.${index}.reelDuration`, { valueAsNumber: true })}
+                            {...register(`timeSlots.${index}.reelDuration`, { valueAsNumber: true, required: 'Duration is required for video stories' })}
                             className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
+                            required
                           >
                             <option value="">Select duration...</option>
                             <option value={8}>8 seconds - Quick</option>
@@ -727,15 +775,39 @@ export default function ScheduleForm({
                         </div>
                       </div>
 
+                      {/* Image Count - only show for post_with_image post type */}
+                      {watch(`timeSlots.${index}.postType`) === 'post_with_image' && (
+                        <div className="mt-3">
+                          <label className="block text-xs font-medium text-black-medium mb-1">
+                            Number of Images
+                          </label>
+                          <select
+                            {...register(`timeSlots.${index}.imageCount`, { valueAsNumber: true })}
+                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
+                            defaultValue={1}
+                          >
+                            <option value={1}>1 image</option>
+                            <option value={2}>2 images</option>
+                            <option value={3}>3 images</option>
+                            <option value={4}>4 images</option>
+                            <option value={5}>5 images</option>
+                          </select>
+                          <p className="mt-1 text-xs text-gray-500">
+                            Select how many images to generate for this post (1-5)
+                          </p>
+                        </div>
+                      )}
+
                       {/* Reel Duration - only show for reel post type */}
                       {watch(`timeSlots.${index}.postType`) === 'reel' && (
                         <div className="mt-3">
                           <label className="block text-xs font-medium text-black-medium mb-1">
-                            Reel Duration
+                            Reel Duration <span className="text-red-500">*</span>
                           </label>
                           <select
-                            {...register(`timeSlots.${index}.reelDuration`, { valueAsNumber: true })}
+                            {...register(`timeSlots.${index}.reelDuration`, { valueAsNumber: true, required: 'Duration is required for reels' })}
                             className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef5a29]"
+                            required
                           >
                             <option value="">Select duration...</option>
                             <option value={8}>8 seconds</option>

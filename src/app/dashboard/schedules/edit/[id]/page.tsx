@@ -22,7 +22,21 @@ const timeSlotSchema = z.object({
   dimensions: z.string().optional(),
   preferredVoiceAccent: z.string().optional(),
   reelDuration: z.number().optional(),
-  storyType: z.string().optional(),
+  storyType: z.string().optional().default('image'),
+  imageCount: z.number().min(1).max(5).optional().default(1),
+}).refine((data) => {
+  // Require reelDuration for reels
+  if (data.postType === 'reel' && !data.reelDuration) {
+    return false;
+  }
+  // Require reelDuration for video stories
+  if (data.postType === 'story' && data.storyType === 'video' && !data.reelDuration) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Duration is required for reels and video stories',
+  path: ['reelDuration'],
 });
 
 const scheduleSchema = z.object({
@@ -108,6 +122,7 @@ export default function EditSchedulePage() {
           dimensions: '',
           preferredVoiceAccent: '',
           reelDuration: undefined,
+          imageCount: 1,
         }
       ],
     },
@@ -146,6 +161,8 @@ export default function EditSchedulePage() {
           dimensions: slot.dimensions || '',
           preferredVoiceAccent: slot.preferredVoiceAccent || '',
           reelDuration: slot.reelDuration || undefined,
+          storyType: slot.storyType || 'image',
+          imageCount: slot.imageCount || 1,
         })) || [
           {
             startTime: '09:00',
@@ -158,6 +175,7 @@ export default function EditSchedulePage() {
             dimensions: '',
             preferredVoiceAccent: '',
             reelDuration: undefined,
+            imageCount: 1,
           }
         ],
       });
@@ -220,6 +238,8 @@ export default function EditSchedulePage() {
       dimensions: '',
       preferredVoiceAccent: '',
       reelDuration: undefined,
+      storyType: 'image',
+      imageCount: 1,
     });
   };
 
@@ -587,8 +607,8 @@ export default function EditSchedulePage() {
                             {...register(`timeSlots.${index}.storyType`)}
                             className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F]"
                           >
-                            <option value="video">Video Story</option>
                             <option value="image">Image Story</option>
+                            <option value="video">Video Story</option>
                           </select>
                         </div>
                       )}
@@ -597,11 +617,12 @@ export default function EditSchedulePage() {
                       {watch(`timeSlots.${index}.postType`) === 'story' && watch(`timeSlots.${index}.storyType`) === 'video' && (
                         <div className="mt-3">
                           <label className="block text-xs font-medium text-black-medium mb-1">
-                            Story Duration (seconds)
+                            Story Duration (seconds) <span className="text-red-500">*</span>
                           </label>
                           <select
-                            {...register(`timeSlots.${index}.reelDuration`, { valueAsNumber: true })}
+                            {...register(`timeSlots.${index}.reelDuration`, { valueAsNumber: true, required: 'Duration is required for video stories' })}
                             className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F]"
+                            required
                           >
                             <option value="">Select duration...</option>
                             <option value={8}>8 seconds - Quick</option>
@@ -651,15 +672,39 @@ export default function EditSchedulePage() {
                         </div>
                       </div>
 
+                      {/* Image Count - only show for post_with_image post type */}
+                      {watch(`timeSlots.${index}.postType`) === 'post_with_image' && (
+                        <div className="mt-3">
+                          <label className="block text-xs font-medium text-black-medium mb-1">
+                            Number of Images
+                          </label>
+                          <select
+                            {...register(`timeSlots.${index}.imageCount`, { valueAsNumber: true })}
+                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F]"
+                            defaultValue={1}
+                          >
+                            <option value={1}>1 image</option>
+                            <option value={2}>2 images</option>
+                            <option value={3}>3 images</option>
+                            <option value={4}>4 images</option>
+                            <option value={5}>5 images</option>
+                          </select>
+                          <p className="mt-1 text-xs text-gray-500">
+                            Select how many images to generate for this post (1-5)
+                          </p>
+                        </div>
+                      )}
+
                       {/* Reel Duration - only show for reel post type */}
                       {watch(`timeSlots.${index}.postType`) === 'reel' && (
                         <div className="mt-3">
                           <label className="block text-xs font-medium text-black-medium mb-1">
-                            Reel Duration
+                            Reel Duration <span className="text-red-500">*</span>
                           </label>
                           <select
-                            {...register(`timeSlots.${index}.reelDuration`, { valueAsNumber: true })}
+                            {...register(`timeSlots.${index}.reelDuration`, { valueAsNumber: true, required: 'Duration is required for reels' })}
                             className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF014F]"
+                            required
                           >
                             <option value="">Select duration...</option>
                             <option value={8}>8 seconds</option>
