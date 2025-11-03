@@ -28,7 +28,7 @@ const timeSlotSchema = z.object({
 const scheduleSchema = z.object({
   accountId: z.number().min(1, 'Please select an account'),
   name: z.string().min(1, 'Schedule name is required').max(100, 'Name must be less than 100 characters'),
-  description: z.string().max(500, 'Description must be less than 500 characters').optional(),
+  description: z.string().max(3000, 'Description must be less than 3000 characters').optional(),
   frequency: z.enum(['daily', 'weekly', 'custom']).default('daily'),
   status: z.enum(['active', 'paused', 'inactive']).default('active'),
   isEnabled: z.boolean().default(true),

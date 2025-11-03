@@ -16,7 +16,7 @@ import AppLayout from '@/components/layout/AppLayout';
 // Zod schema for form validation
 const accountSchema = z.object({
   name: z.string().min(1, 'Account name is required').max(100, 'Account name must be less than 100 characters'),
-  description: z.string().max(500, 'Description must be less than 500 characters').optional(),
+  description: z.string().max(3000, 'Description must be less than 3000 characters').optional(),
   topics: z.string().optional(),
   tone: z.string().optional(),
   type: z.enum(['business', 'creator']),
