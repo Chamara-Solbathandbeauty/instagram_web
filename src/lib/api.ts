@@ -236,6 +236,9 @@ export const aiApi = {
   generateSchedulePost: (data: { accountId: number; userInstructions?: string }) => api.post('/ai/generate-schedule', data),
   generateContent: (data: { scheduleId: number; generationWeek?: string; userInstructions?: string }) => api.post('/ai/generate-content', data),
   getNextGeneratableWeek: (scheduleId: number) => api.get(`/ai/next-generatable-week/${scheduleId}`),
+  getGenerationJob: (jobId: number) => api.get(`/ai/generation-job/${jobId}`),
+  getScheduleActiveJob: (scheduleId: number) => api.get(`/ai/generation-job/schedule/${scheduleId}`),
+  getActiveJob: () => api.get('/ai/generation-job/active'),
 };
 
 // Instagram API functions

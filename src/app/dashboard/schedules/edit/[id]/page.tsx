@@ -89,6 +89,13 @@ export default function EditSchedulePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [showContentGenerationModal, setShowContentGenerationModal] = useState(false);
   const [userInstructions, setUserInstructions] = useState('');
+  const [generationJob, setGenerationJob] = useState<{
+    id: number;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    progress: number;
+    errorMessage?: string;
+    generatedContentCount?: number;
+  } | null>(null);
 
   const {
     register,
@@ -206,11 +213,107 @@ export default function EditSchedulePage() {
     }
   }, [scheduleId]);
 
+  const checkActiveJob = useCallback(async () => {
+    try {
+      // Check for any active job globally (not just this schedule)
+      const response = await aiApi.getActiveJob();
+      if (response.data.data) {
+        const activeJob = response.data.data;
+        
+        // Only consider pending or processing jobs as "active"
+        if (activeJob.status === 'pending' || activeJob.status === 'processing') {
+          setGenerationJob(activeJob);
+          setIsGeneratingContent(true);
+        } else {
+          // Job is completed or failed - clear it so user can generate again
+          if (activeJob.scheduleId === parseInt(scheduleId)) {
+            // If it was for this schedule, refresh the week info
+            await checkNextGeneratableWeek();
+          }
+          setGenerationJob(null);
+          setIsGeneratingContent(false);
+        }
+      } else {
+        // No active job found - clear state
+        setGenerationJob(null);
+        setIsGeneratingContent(false);
+      }
+    } catch (error) {
+      console.error('Error checking active job:', error);
+      setGenerationJob(null);
+      setIsGeneratingContent(false);
+    }
+  }, [scheduleId, checkNextGeneratableWeek]);
+
   useEffect(() => {
     fetchSchedule();
     fetchAccounts();
     checkNextGeneratableWeek();
-  }, [fetchSchedule, checkNextGeneratableWeek]);
+    checkActiveJob();
+  }, [fetchSchedule, checkNextGeneratableWeek, checkActiveJob]);
+
+  // Poll job status if there's an active job (only if it's for this schedule)
+  useEffect(() => {
+    if (!generationJob || (generationJob.status !== 'pending' && generationJob.status !== 'processing')) {
+      return;
+    }
+
+    // Only poll if this is the job for this schedule
+    if (generationJob.scheduleId !== parseInt(scheduleId)) {
+      // Check for active job periodically to see when it completes
+      const checkInterval = setInterval(async () => {
+        try {
+          const response = await aiApi.getActiveJob();
+          if (!response.data.data) {
+            // No active job anymore - user can generate again
+            setGenerationJob(null);
+            setIsGeneratingContent(false);
+            clearInterval(checkInterval);
+          } else {
+            const job = response.data.data;
+            // Only keep job if it's still active, otherwise clear it
+            if (job.status === 'pending' || job.status === 'processing') {
+              setGenerationJob(job);
+            } else {
+              // Job completed or failed - clear it
+              setGenerationJob(null);
+              setIsGeneratingContent(false);
+              clearInterval(checkInterval);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking active job:', error);
+        }
+      }, 3000);
+      return () => clearInterval(checkInterval);
+    }
+
+    // Poll this specific job if it belongs to this schedule
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await aiApi.getGenerationJob(generationJob.id);
+        const job = response.data.data;
+        setGenerationJob(job);
+
+        if (job.status === 'completed') {
+          setIsGeneratingContent(false);
+          clearInterval(pollInterval);
+          setGenerationJob(null); // Clear job so user can generate again
+          await checkNextGeneratableWeek();
+          alert(`Successfully generated ${job.generatedContentCount || 0} content pieces for the week of ${nextGeneratableWeek}`);
+        } else if (job.status === 'failed') {
+          setIsGeneratingContent(false);
+          clearInterval(pollInterval);
+          setGenerationJob(null); // Clear job so user can generate again
+          alert(`Content generation failed: ${job.errorMessage || 'Unknown error'}`);
+        }
+      } catch (error) {
+        console.error('Error polling job status:', error);
+      }
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [generationJob, scheduleId, nextGeneratableWeek, checkNextGeneratableWeek]);
 
   const handleFormSubmit = async (data: ScheduleFormData) => {
     setIsSubmitting(true);
@@ -257,6 +360,16 @@ export default function EditSchedulePage() {
       return;
     }
 
+    // Check if there's already an active job (any schedule)
+    if (generationJob && (generationJob.status === 'pending' || generationJob.status === 'processing')) {
+      if (generationJob.scheduleId === parseInt(scheduleId)) {
+        alert('Content generation is already in progress for this schedule. Please wait for it to complete.');
+      } else {
+        alert(`Content generation is already in progress for another schedule (Job ID: ${generationJob.id}). Please wait for it to complete before starting a new one.`);
+      }
+      return;
+    }
+
     setIsGeneratingContent(true);
     setShowContentGenerationModal(false);
     
@@ -267,15 +380,51 @@ export default function EditSchedulePage() {
         ...(userInstructions.trim() && { userInstructions: userInstructions.trim() })
       });
 
-      alert(`Successfully generated ${response.data.data.generatedContent.length} content pieces for the week of ${nextGeneratableWeek}`);
-      
-      // Clear instructions and refresh the next generatable week
+      // Job created, start polling
+      const jobId = response.data.data.jobId;
+      setGenerationJob({
+        id: jobId,
+        status: 'pending',
+        progress: 0,
+      });
       setUserInstructions('');
-      await checkNextGeneratableWeek();
-    } catch (error) {
+      
+      // Start polling immediately
+      const pollInterval = setInterval(async () => {
+        try {
+          const jobResponse = await aiApi.getGenerationJob(jobId);
+          const job = jobResponse.data.data;
+          setGenerationJob(job);
+
+          if (job.status === 'completed') {
+            setIsGeneratingContent(false);
+            clearInterval(pollInterval);
+            await checkNextGeneratableWeek();
+            alert(`Successfully generated ${job.generatedContentCount || 0} content pieces for the week of ${nextGeneratableWeek}`);
+          } else if (job.status === 'failed') {
+            setIsGeneratingContent(false);
+            clearInterval(pollInterval);
+            alert(`Content generation failed: ${job.errorMessage || 'Unknown error'}`);
+          }
+        } catch (error) {
+          console.error('Error polling job status:', error);
+          clearInterval(pollInterval);
+          setIsGeneratingContent(false);
+        }
+      }, 3000); // Poll every 3 seconds
+
+    } catch (error: any) {
       console.error('Error generating content:', error);
-      alert('Failed to generate content. Please try again.');
-    } finally {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to generate content. Please try again.';
+      
+      // Check if error is about concurrent job
+      if (error?.response?.status === 409) {
+        // Conflict - there's already an active job
+        await checkActiveJob();
+      } else {
+        alert(errorMessage);
+      }
+      
       setIsGeneratingContent(false);
     }
   };
@@ -317,11 +466,33 @@ export default function EditSchedulePage() {
             <h1 className="text-2xl font-bold text-gray-900">Edit Posting Schedule</h1>
           </div>
           <div className="flex items-center gap-3">
+            {generationJob && (generationJob.status === 'pending' || generationJob.status === 'processing') && (
+              <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-blue-900">
+                    {generationJob.scheduleId === parseInt(scheduleId) ? (
+                      generationJob.status === 'pending' ? 'Queued for processing...' : `Processing... ${generationJob.progress}%`
+                    ) : (
+                      `Content generation in progress for another schedule (${generationJob.progress}%) - Please wait...`
+                    )}
+                  </span>
+                  {generationJob.status === 'processing' && (
+                    <div className="w-48 bg-blue-200 rounded-full h-1.5 mt-1">
+                      <div 
+                        className="bg-blue-600 h-1.5 rounded-full transition-all duration-300" 
+                        style={{ width: `${generationJob.progress}%` }}
+                      ></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             {nextGeneratableWeek && (
               <Button
                 type="button"
                 onClick={handleGenerateContentClick}
-                disabled={isGeneratingContent || isSubmitting}
+                disabled={isGeneratingContent || isSubmitting || !!(generationJob && (generationJob.status === 'pending' || generationJob.status === 'processing'))}
                 className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 disabled:opacity-50"
               >
                 <Wand2 className="h-4 w-4" />
@@ -337,10 +508,33 @@ export default function EditSchedulePage() {
             <Wand2 className="h-5 w-5 text-blue-600 mt-0.5" />
             <div className="flex-1">
               <h4 className="text-sm font-medium text-blue-900 mb-1">AI Content Generation</h4>
+              {generationJob && generationJob.status === 'failed' && generationJob.scheduleId === parseInt(scheduleId) && (
+                <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                  <strong>Generation Failed:</strong> {generationJob.errorMessage || 'Unknown error occurred'}
+                </div>
+              )}
+              {generationJob && generationJob.status === 'completed' && generationJob.scheduleId === parseInt(scheduleId) && (
+                <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
+                  <strong>Generation Completed:</strong> Successfully generated {generationJob.generatedContentCount || 0} content pieces.
+                </div>
+              )}
+              {generationJob && (generationJob.status === 'pending' || generationJob.status === 'processing') && generationJob.scheduleId !== parseInt(scheduleId) && (
+                <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-700">
+                  <strong>Another schedule is generating:</strong> Content generation is currently in progress for another schedule. Please wait for it to complete (Progress: {generationJob.progress}%).
+                </div>
+              )}
               {nextGeneratableWeek ? (
                 <p className="text-sm text-blue-700">
                   Content can be generated for the week starting <strong>{new Date(nextGeneratableWeek).toLocaleDateString()}</strong>. 
-                  Click "Generate Content" to create AI-generated posts, reels, and stories for this schedule.
+                  {generationJob && (generationJob.status === 'pending' || generationJob.status === 'processing') ? (
+                    generationJob.scheduleId === parseInt(scheduleId) ? (
+                      <> Generation is in progress for this schedule. You can close this page and it will continue processing in the background.</>
+                    ) : (
+                      <> Another schedule is currently generating content. Please wait for it to complete.</>
+                    )
+                  ) : (
+                    <> Click "Generate Content" to create AI-generated posts, reels, and stories for this schedule.</>
+                  )}
                 </p>
               ) : (
                 <p className="text-sm text-blue-700">
