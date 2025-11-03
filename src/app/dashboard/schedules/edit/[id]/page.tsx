@@ -91,6 +91,7 @@ export default function EditSchedulePage() {
   const [userInstructions, setUserInstructions] = useState('');
   const [generationJob, setGenerationJob] = useState<{
     id: number;
+    scheduleId: number;
     status: 'pending' | 'processing' | 'completed' | 'failed';
     progress: number;
     errorMessage?: string;
@@ -384,6 +385,7 @@ export default function EditSchedulePage() {
       const jobId = response.data.data.jobId;
       setGenerationJob({
         id: jobId,
+        scheduleId: parseInt(scheduleId),
         status: 'pending',
         progress: 0,
       });
